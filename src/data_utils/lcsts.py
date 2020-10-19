@@ -44,7 +44,7 @@ class LCSTS(object):
         if self._training_text_csv is not None and self._training_summmary_csv is not None:
             return self._training_text_csv, self._training_summmary_csv
         xml_file_path = self._format_as_xml(self._train_txt_file_path, self._output_path)
-        self._training_text_csv, self._training_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path)
+        self._training_text_csv, self._training_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="train")
         return self._training_text_csv, self._training_summmary_csv
 
     @property
@@ -57,7 +57,7 @@ class LCSTS(object):
         if self._val_text_csv is not None and self._val_summmary_csv is not None:
             return self._val_text_csv, self._val_summmary_csv
         xml_file_path = self._format_as_xml(self._val_txt_file_path, self._output_path)
-        self._val_text_csv, self._val_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path)
+        self._val_text_csv, self._val_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="val")
         return self._val_text_csv, self._val_summmary_csv
     
     @property
@@ -70,7 +70,7 @@ class LCSTS(object):
         if self._test_text_csv is not None and self._test_summmary_csv is not None:
             return self._test_text_csv, self._test_summmary_csv
         xml_file_path = self._format_as_xml(self._test_txt_file_path, self._output_path)
-        self._test_text_csv, self._test_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path)
+        self._test_text_csv, self._test_summmary_csv = self._parse_xml_to_csv(xml_file_path, self._output_path, usage="test")
         return self._test_text_csv, self._test_summmary_csv
     
     def get_random_permutation(self):
@@ -220,15 +220,15 @@ if __name__ == '__main__':
     parser.add_argument('--training_path',
                         help='Where is the training data (PART_I.txt) located?',
                         type=str,
-                        default="/Users/saraxu/HuShih/data/LCSTS2.0/DATA/PART_I.txt")
+                        default="../../data/LCSTS2.0/DATA/PART_I.txt")
     parser.add_argument('--val_path',
                         help='Where is the validation data (PART_II.txt) located?',
                         type=str,
-                        default="/Users/saraxu/HuShih/data/LCSTS2.0/DATA/PART_II.txt")
+                        default="../../data/LCSTS2.0/DATA/PART_II.txt")
     parser.add_argument('--test_path',
                         help='Where is the validation data (PART_III.txt) located?',
                         type=str,
-                        default="/Users/saraxu/HuShih/data/LCSTS2.0/DATA/PART_III.txt")
+                        default="../../data/LCSTS2.0/DATA/PART_III.txt")
     args = parser.parse_args()
     lcsts = LCSTS(args.training_path, args.val_path, args.test_path, output_path="./")
     # parse the test data and store to csv

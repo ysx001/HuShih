@@ -15,13 +15,13 @@ import utils
 class LCSTS(object):
     """
     Read in the LCSTS2.0 dataset and perform operations on it.
-    The dataset can be accessed from http://icrc.hitsz.edu.cn/Article/show/139.html. 
+    The dataset can be accessed from http://icrc.hitsz.edu.cn/Article/show/139.html.
     The data is split into three parts:
     PART_I.txt - used as training data
     PART_II.txt - used as validation data
     PART_III.txt - used as test data
     """
-    def __init__(self, train_txt_file_path, val_txt_file_path, 
+    def __init__(self, train_txt_file_path, val_txt_file_path,
                  test_txt_file_path, output_path="./"):
         self._train_txt_file_path = train_txt_file_path
         self._val_txt_file_path = val_txt_file_path
@@ -44,7 +44,7 @@ class LCSTS(object):
         if self._training_text_csv is not None and self._training_summmary_csv is not None:
             return self._training_text_csv, self._training_summmary_csv
         xml_file_path = self._format_as_xml(self._train_txt_file_path, self._output_path)
-        self._training_text_csv, self._training_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="train")
+        self._training_text_csv, self._training_summmary_csv, self._training_merged_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="train")
         return self._training_text_csv, self._training_summmary_csv
 
     @property
@@ -57,9 +57,9 @@ class LCSTS(object):
         if self._val_text_csv is not None and self._val_summmary_csv is not None:
             return self._val_text_csv, self._val_summmary_csv
         xml_file_path = self._format_as_xml(self._val_txt_file_path, self._output_path)
-        self._val_text_csv, self._val_summmary_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="val")
+        self._val_text_csv, self._val_summmary_csv, self._val_merged_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="val")
         return self._val_text_csv, self._val_summmary_csv
-    
+
     @property
     def test_csv(self):
         """Get the validation csv files' path.
@@ -70,9 +70,9 @@ class LCSTS(object):
         if self._test_text_csv is not None and self._test_summmary_csv is not None:
             return self._test_text_csv, self._test_summmary_csv
         xml_file_path = self._format_as_xml(self._test_txt_file_path, self._output_path)
-        self._test_text_csv, self._test_summmary_csv = self._parse_xml_to_csv(xml_file_path, self._output_path, usage="test")
+        self._test_text_csv, self._test_summmary_csv, self._test_merged_csv = self._parse_xml_to_csv(xml_file_path, self._output_path, usage="test")
         return self._test_text_csv, self._test_summmary_csv
-    
+
     def get_random_permutation(self):
         return self._generate_rand_permutation(self.training_csv, self._output_path)
 
@@ -103,11 +103,11 @@ class LCSTS(object):
             f.write(fixed)
             f.write("\n</data>")
         return xml_file_path
-    
+
     def _parse_xml_to_csv(self, xml_file_path, output_path, usage="train"):
         """
             The xml comes in with 2 formats.
-            For PART_I (Training), the data is 
+            For PART_I (Training), the data is
                 <doc id=x>
                     <summary>
                         ...
@@ -129,36 +129,45 @@ class LCSTS(object):
         Args:
             xml_file_path (str): The input of the xml file.
             output_path (str): The directory to save the output files.
-            usage (str, optional): The usage of the data e.g. train, eval, test. 
+            usage (str, optional): The usage of the data e.g. train, eval, test.
                                    Defaults to "training".
 
         Returns:
-            str, str: The short text file path and the summary file path.
-                      The texts and summaries are matched by doc id.
+            str, str, str:  the short text file path
+                            the summary file path
+                            the merged (text + summary) file path
         """
         parser = ET.XMLParser(encoding='utf-8')
         # create element tree object
         tree = ET.parse(xml_file_path, parser=parser)
-        # get root element 
+        # get root element
         root = tree.getroot()
         text = []  # list of dict for all the short_text data
         summary = []  # list of dict for all the summaries
+        merged = []
         for doc in root:
             text_dict = {}
             summary_dict = {}
+            merged_dict = {}
             text_dict['id'] = int(doc.attrib['id'])
             summary_dict['id'] = int(doc.attrib['id'])
+            merged_dict['id'] = int(doc.attrib['id'])
             print(text_dict['id'])
             for item in doc:
                 if item.tag == "short_text":
                     text_dict[item.tag] = item.text.strip()
+                    merged_dict[item.tag] = item.text.strip()
                 elif item.tag == "summary":
                     summary_dict[item.tag] = item.text.strip()
+                    merged_dict[item.tag] = item.text.strip()
                 elif item.tag == "human_label":
                     summary_dict[item.tag] = int(item.text.strip())
                     text_dict[item.tag] = int(item.text.strip())
+                    merged_dict[item.tag] = int(item.text.strip())
             text.append(text_dict)
             summary.append(summary_dict)
+            merged.append(merged_dict)
+            print(merged)
         # save to csv for later processing
         # save the short text files
         text_keys = text[0].keys()
@@ -174,16 +183,23 @@ class LCSTS(object):
             dict_writer = csv.DictWriter(output_file, summary_keys)
             dict_writer.writeheader()
             dict_writer.writerows(summary)
-        return text_file_path, summmary_file_path
+        # save the merged files
+        merged_keys = merged[0].keys()
+        merged_file_path = os.path.join(output_path, usage + '_merged.csv')
+        with open(merged_file_path, 'w', newline='')  as output_file:
+            dict_writer = csv.DictWriter(output_file, merged_keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(merged)
+        return text_file_path, summmary_file_path, merged_file_path
 
-    def _generate_rand_permutation(self, text_csv, output_path, 
+    def _generate_rand_permutation(self, text_csv, output_path,
                                    output_file_name="rand_permutation.csv", num_perm=10):
         """Generate random permutations of data given text csv file.
 
         Args:
             text_csv (str): the file path for text csv
             output_path (str): The directory to save the output files.
-            output_file_name (str, optional): The file name fore the output csv. 
+            output_file_name (str, optional): The file name fore the output csv.
                                               Defaults to "rand_permutation.csv".
             num_perm (int, optional): The number of random permutations. Defaults to 10.
 

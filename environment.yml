@@ -6,5 +6,7 @@ dependencies:
   - matplotlib=2.2.2
   - numpy=1.15.0
   - pip=10.0.1
+  - tensorflow>=2.0  # This is required for transformers
+  - torchvision>=1.4.0
   - scipy
   - pillow

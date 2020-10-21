@@ -10,15 +10,15 @@ logging.basicConfig(level=logging.INFO)
 model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME, MODEL_NAME)
 tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
 
-# CLS token will work as BOS token
+# # CLS token will work as BOS token
 tokenizer.bos_token = tokenizer.cls_token
-
-# SEP token will work as EOS token
+#
+# # SEP token will work as EOS token
 tokenizer.eos_token = tokenizer.sep_token
 
 # load train and validation data
-train_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])
-val_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])  # placer_holder
+train_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])['train']
+val_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])['train']  # placer_holder
 
 # load rouge for validation
 rouge = nlp.load_metric("rouge")

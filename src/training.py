@@ -1,8 +1,26 @@
+# %%
 import nlp
+import os
 import logging
 from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingArguments
 from datasets import load_dataset
+from data_utils.lcsts import LCSTS
 
+root = os.path.dirname(os.getcwd())  # Get the root level dir
+#%%
+training_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
+val_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
+test_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
+output_path = os.path.join(root, 'data')
+
+print(test_path)
+
+# %%
+lcsts = LCSTS(training_path, val_path, test_path, output_path=output_path)
+_, _, merged_test_csv = lcsts.test_csv
+print("Test files saved to path {}".format(merged_test_csv))
+
+#%%
 MODEL_NAME='hfl/chinese-roberta-wwm-ext'
 
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +40,6 @@ val_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])['train'] 
 
 # load rouge for validation
 rouge = nlp.load_metric("rouge")
-
 
 # set decoding params
 model.config.decoder_start_token_id = tokenizer.bos_token_id

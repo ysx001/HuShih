@@ -9,8 +9,7 @@ import os
 import argparse
 import xml.etree.ElementTree as ET
 import numpy as np
-import utils
-
+from data_utils.utils import split_unicode_chrs
 # TODO: define an abstract class for datasets
 class LCSTS(object):
     """
@@ -45,7 +44,7 @@ class LCSTS(object):
             return self._training_text_csv, self._training_summmary_csv
         xml_file_path = self._format_as_xml(self._train_txt_file_path, self._output_path)
         self._training_text_csv, self._training_summmary_csv, self._training_merged_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="train")
-        return self._training_text_csv, self._training_summmary_csv
+        return self._training_text_csv, self._training_summmary_csv, self._training_merged_csv
 
     @property
     def validation_csv(self):
@@ -58,7 +57,7 @@ class LCSTS(object):
             return self._val_text_csv, self._val_summmary_csv
         xml_file_path = self._format_as_xml(self._val_txt_file_path, self._output_path)
         self._val_text_csv, self._val_summmary_csv, self._val_merged_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="val")
-        return self._val_text_csv, self._val_summmary_csv
+        return self._val_text_csv, self._val_summmary_csv, self._val_merged_csv
 
     @property
     def test_csv(self):
@@ -71,7 +70,7 @@ class LCSTS(object):
             return self._test_text_csv, self._test_summmary_csv
         xml_file_path = self._format_as_xml(self._test_txt_file_path, self._output_path)
         self._test_text_csv, self._test_summmary_csv, self._test_merged_csv = self._parse_xml_to_csv(xml_file_path, self._output_path, usage="test")
-        return self._test_text_csv, self._test_summmary_csv
+        return self._test_text_csv, self._test_summmary_csv, self._test_merged_csv
 
     def get_random_permutation(self):
         return self._generate_rand_permutation(self.training_csv, self._output_path)
@@ -89,7 +88,7 @@ class LCSTS(object):
             str: The location of the output xml files.
         """
         # Read in the file
-        with open(txt_file_path, 'r') as f:
+        with open(txt_file_path, 'r', encoding="utf-8") as f:
             filedata = f.read()
         base_name = os.path.splitext(os.path.basename(txt_file_path))[0]
 
@@ -152,7 +151,6 @@ class LCSTS(object):
             text_dict['id'] = int(doc.attrib['id'])
             summary_dict['id'] = int(doc.attrib['id'])
             merged_dict['id'] = int(doc.attrib['id'])
-            print(text_dict['id'])
             for item in doc:
                 if item.tag == "short_text":
                     text_dict[item.tag] = item.text.strip()
@@ -167,7 +165,6 @@ class LCSTS(object):
             text.append(text_dict)
             summary.append(summary_dict)
             merged.append(merged_dict)
-            print(merged)
         # save to csv for later processing
         # save the short text files
         text_keys = text[0].keys()
@@ -216,7 +213,7 @@ class LCSTS(object):
             raw['data'] = row['data']
             raw['label'] = 1
             new_data.append(raw)
-            split_chars = utils.split_unicode_chrs(row['data'])
+            split_chars = split_unicode_chrs(row['data'])
             for _ in range(num_perm):
                 rand = {}
                 rand['data'] = "".join(np.random.permutation(split_chars))

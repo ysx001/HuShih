@@ -35,8 +35,8 @@ tokenizer.bos_token = tokenizer.cls_token
 tokenizer.eos_token = tokenizer.sep_token
 
 # load train and validation data
-train_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])['train']
-val_dataset = load_dataset('csv', data_files=['data/test_merged.csv'])['train']  # placer_holder
+train_dataset = load_dataset('csv', data_files=[merged_test_csv])['train']
+val_dataset = load_dataset('csv', data_files=[merged_test_csv])['train']  # placer_holder
 
 # load rouge for validation
 rouge = nlp.load_metric("rouge")

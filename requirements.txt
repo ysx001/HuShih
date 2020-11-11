@@ -74,3 +74,4 @@ Werkzeug==1.0.1
 wrapt==1.12.1
 xxhash==2.0.0
 zipp==3.3.1
+PrettyTable==1.0.1

@@ -28,6 +28,20 @@ logging.basicConfig(level=logging.INFO)
 model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME, MODEL_NAME)
 tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
 
+# Freeze all layers in encoder
+for param in model.encoder.base_model.parameters():
+    param.requires_grad = False
+
+# Freeze embedding layers, and first N layers of decoder
+def freeze_decoder_weight(num_layers):
+    for param in model.decoder.base_model.embeddings.parameters():
+        param.requires_grad = False
+    for i in range(num_layers):
+        for param in model.decoder.base_model.encoder.layer[i].parameters():
+            param.requires_grad = False
+# Try freeze first 8 layers first
+freeze_decoder_weight(8)
+
 # # CLS token will work as BOS token
 tokenizer.bos_token = tokenizer.cls_token
 #

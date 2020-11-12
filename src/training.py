@@ -6,6 +6,7 @@ from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingAr
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from lm_score.bert_lm import get_sentence_score 
+import torch.nn as nn
 
 root = os.path.dirname(os.getcwd())  # Get the root level dir
 #%%

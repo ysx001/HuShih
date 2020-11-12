@@ -517,4 +517,4 @@ def get_sentence_score(sentence, output_dir="log"):
   results = parse_result(result, all_tokens, output_predict_file)
   return results["ppl"]
 
-# get_sentence_score("我是猪")
+# print(get_sentence_score("我是猪"))

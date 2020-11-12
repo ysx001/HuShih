@@ -52,7 +52,7 @@ flags.DEFINE_string(
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-    "output_dir", DETAULT_OUTPUT_DIR,
+    "output_dir", DEFAULT_OUTPUT_DIR,
     "The output directory where the model checkpoints will be written.")
 
 flags.DEFINE_string("vocab_file", DEFAULT_VOCAB_FILE,

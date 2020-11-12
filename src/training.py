@@ -144,6 +144,15 @@ training_args = TrainingArguments(
     save_total_limit=10,
 )
 
+def compute_hybrid_loss(labels, outputs):
+    pass
+
+class CustomizeTrainer(Trainer):
+    def compute_loss(self, model, inputs):
+        labels = inputs.pop("labels")
+        outputs = models(**inputs)
+        return compute_hybrid_loss(outputs[0], labels)
+
 # instantiate trainer
 trainer = Trainer(
     model=model,

@@ -5,6 +5,7 @@ import logging
 from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingArguments
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
+from bert_lm.run_lm_predict import get_sentence_score 
 
 root = os.path.dirname(os.getcwd())  # Get the root level dir
 #%%
@@ -145,7 +146,7 @@ training_args = TrainingArguments(
 )
 
 def compute_hybrid_reward(labels, outputs):
-    pass
+    return get_sentence_score("我是猪")
 
 prev_reward = 0
 class CustomizeTrainer(Trainer):

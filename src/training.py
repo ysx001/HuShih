@@ -5,7 +5,7 @@ import logging
 from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingArguments
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
-from bert_lm.run_lm_predict import get_sentence_score 
+from lm_score.bert_lm import get_sentence_score 
 
 root = os.path.dirname(os.getcwd())  # Get the root level dir
 #%%

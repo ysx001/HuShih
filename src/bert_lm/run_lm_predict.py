@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """BERT language model predict."""
-import sys
-sys.path.append("src/bert_lm")
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -23,6 +20,8 @@ from __future__ import print_function
 import time
 import uuid
 import os
+import sys
+sys.path.append(os.getcwd())
 import json
 import modeling
 import tokenization
@@ -509,3 +508,5 @@ def get_sentence_score(sentence):
   output_predict_file = "tmp/{}-lm-score.json".format(time.time())
   results = parse_result(result, all_tokens, output_predict_file)
   return results["ppl"]
+
+# get_sentence_score("我是猪")

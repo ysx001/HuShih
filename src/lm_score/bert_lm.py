@@ -32,11 +32,17 @@ from bert_modeling import tokenization
 flags = tf.flags
 FLAGS = flags.FLAGS
 
+root = os.path.dirname(os.getcwd())
+
+DEFAULT_BERT_CONFIG = os.path.join(root, "model/chinese_wwm_ext_L-12_H-768_A-12/bert_config.json")
+DEFAULT_OUTPUT_DIR = os.path.join(root, "tmp")
+DEFAULT_VOCAB_FILE = os.path.join(root, "model/chinese_wwm_ext_L-12_H-768_A-12/vocab.txt")
+
 flags.DEFINE_integer("max_predictions_per_seq", 20,
 "In this task, it also refers to maximum number of masked tokens per word.")
 
 flags.DEFINE_string(
-    "bert_config_file", "model/chinese_wwm_ext_L-12_H-768_A-12/bert_config.json",
+    "bert_config_file", DEFAULT_BERT_CONFIG,
     "The config json file corresponding to the pre-trained BERT model. "
     "This specifies the model architecture.")
 
@@ -46,10 +52,10 @@ flags.DEFINE_string(
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-    "output_dir", "tmp",
+    "output_dir", DETAULT_OUTPUT_DIR,
     "The output directory where the model checkpoints will be written.")
 
-flags.DEFINE_string("vocab_file", "model/chinese_wwm_ext_L-12_H-768_A-12/vocab.txt",
+flags.DEFINE_string("vocab_file", DEFAULT_VOCAB_FILE,
                     "The vocabulary file that the BERT model was trained on.")
 
 ## Other parameters

@@ -4,6 +4,7 @@
 
 # data
 data/
+model/
 runs/
 
 # Byte-compiled / optimized / DLL files

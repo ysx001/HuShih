@@ -462,7 +462,7 @@ def parse_result(result, all_tokens, output_file=None):
       writer.write(json.dumps(sentences, indent=2, ensure_ascii=False))
     return sentence
 
-def get_sentence_score(sentence):
+def get_sentence_score(sentence, output_dir="log"):
   """
   Given a sentence, output the approximated perplexity score 
   generated using BERT.
@@ -505,7 +505,8 @@ def get_sentence_score(sentence):
       config=run_config,
       predict_batch_size=FLAGS.predict_batch_size)
   result = estimator.predict(input_fn=predict_input_fn)
-  output_predict_file = "tmp/{}-lm-score.json".format(time.time())
+  tf.gfile.MakeDirs(output_dir)
+  output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
   results = parse_result(result, all_tokens, output_predict_file)
   return results["ppl"]
 

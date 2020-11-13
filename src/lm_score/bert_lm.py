@@ -585,6 +585,6 @@ def get_sentences_score(sentences, ppl, max_token_size=128, output_dir="log"):
   output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
   results = parse_result(result, all_tokens, output_predict_file)
   
-  return sum[result['ppl'] for result in results]
+  return sum([result['ppl'] for result in results])
 
 # print(get_sentence_score("我是猪"))

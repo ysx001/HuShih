@@ -183,10 +183,6 @@ if __name__ == '__main__':
                         default=16)
     args = parser.parse_args()
     LOG.info("Parsed arguments %s", args)
-    # LOG.info("Reading training set from %s", args.training_path)
-    # LOG.info("Reading validation set from %s", args.val_path)
-    # LOG.info("Reading test set from %s", args.test_path)
-    # LOG.info("Outputs data to %s", args.output_path)
 
     # Step 1: preprocess the dataset and load data
     lcsts = LCSTS(args.training_path, args.val_path, args.test_path,

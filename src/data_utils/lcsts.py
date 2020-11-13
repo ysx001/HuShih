@@ -23,65 +23,41 @@ class LCSTS(object):
     """
     def __init__(self, train_txt_file_path, val_txt_file_path,
                  test_txt_file_path, output_path="./"):
-        self._train_txt_file_path = train_txt_file_path
-        self._val_txt_file_path = val_txt_file_path
-        self._test_txt_file_path = test_txt_file_path
+        self._input_file_paths = dict()
+        self._input_file_paths[UsageTypes.TRAIN.value] = train_txt_file_path
+        self._input_file_paths[UsageTypes.VALIDATION.value] = val_txt_file_path
+        self._input_file_paths[UsageTypes.TEST.value] = test_txt_file_path
+        self._output_file_paths = dict()
+        self._output_file_paths[UsageTypes.TRAIN.value] = None
+        self._output_file_paths[UsageTypes.VALIDATION.value] = None
+        self._output_file_paths[UsageTypes.TEST.value] = None
         self._output_path = output_path
-        self._training_text_csv = None
-        self._training_summmary_csv = None
-        self._training_merged_csv = None
-        self._val_text_csv = None
-        self._val_summmary_csv = None
-        self._val_merged_csv = None
-        self._test_text_csv = None
-        self._test_summmary_csv = None
-        self._test_merged_csv = None
 
     @property
     def training_merged_csv(self):
-        if self._training_merged_csv is None:
+        if self._output_file_paths[UsageTypes.TRAIN.value] is None:
             self.process_csv(usage=UsageTypes.TRAIN.value)
-        return self._training_merged_csv
+        return self._output_file_paths[UsageTypes.TRAIN.value][FilePathTypes.MERGED_FILE_PATH.value]
     
     @property
     def val_merged_csv(self):
-        if self._val_merged_csv is None:
+        if self._output_file_paths[UsageTypes.VALIDATION.value] is None:
             self.process_csv(usage=UsageTypes.VALIDATION.value)
-        return self._val_merged_csv
+        return self._output_file_paths[UsageTypes.VALIDATION.value][FilePathTypes.MERGED_FILE_PATH.value]
 
     @property
     def test_merged_csv(self):
-        if self._test_merged_csv is None:
+        if self._output_file_paths[UsageTypes.TEST.value] is None:
             self.process_csv(usage=UsageTypes.TEST.value)
-        return self._test_merged_csv
+        return self._output_file_paths[UsageTypes.TEST.value][FilePathTypes.MERGED_FILE_PATH.value]
 
     def process_csv(self, usage):
-        xml_file_path = self._format_as_xml(self._train_txt_file_path,
+        xml_file_path = self._format_as_xml(self._input_file_paths[usage],
                                             self._output_path)
         output_dict = self._parse_xml_to_csv(xml_file_path,
                                              self._output_path,
                                              usage=usage)
-        if usage == UsageTypes.TRAIN.value:
-            self._training_text_csv = \
-                output_dict[FilePathTypes.TEXT_FILE_PATH.value]
-            self._training_summmary_csv = \
-                output_dict[FilePathTypes.SUMMARY_FILE_PATH.value]
-            self._training_merged_csv = \
-                output_dict[FilePathTypes.MERGED_FILE_PATH.value]
-        elif usage == UsageTypes.VALIDATION.value:
-            self._val_text_csv = \
-                output_dict[FilePathTypes.TEXT_FILE_PATH.value]
-            self._val_summmary_csv = \
-                output_dict[FilePathTypes.SUMMARY_FILE_PATH.value]
-            self._val_merged_csv = \
-                output_dict[FilePathTypes.MERGED_FILE_PATH.value]
-        elif usage == UsageTypes.TEST.value:
-            self._test_text_csv = \
-                output_dict[FilePathTypes.TEXT_FILE_PATH.value]
-            self._test_summmary_csv = \
-                output_dict[FilePathTypes.SUMMARY_FILE_PATH.value]
-            self._test_merged_csv = \
-                output_dict[FilePathTypes.MERGED_FILE_PATH.value]
+        self._output_file_paths[usage] = output_dict
 
     def get_random_permutation(self):
         return self._generate_rand_permutation(self.training_csv,

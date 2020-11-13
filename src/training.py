@@ -2,14 +2,17 @@
 import nlp
 import os
 import logging
-from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingArguments, Dict
+from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
+                          TrainingArguments)
+from typing import Dict
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
-from lm_score.bert_lm import get_sentence_score 
+from lm_score.bert_lm import get_sentence_score
 import torch.nn as nn
 
+MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'
+
 root = os.path.dirname(os.getcwd())  # Get the root level dir
-#%%
 training_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
 val_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
 test_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
@@ -17,17 +20,14 @@ output_path = os.path.join(root, 'data')
 
 print(test_path)
 
-# %%
 lcsts = LCSTS(training_path, val_path, test_path, output_path=output_path)
 _, _, merged_test_csv = lcsts.test_csv
 print("Test files saved to path {}".format(merged_test_csv))
 
-#%%
-MODEL_NAME='hfl/chinese-roberta-wwm-ext'
-
 logging.basicConfig(level=logging.INFO)
 
-model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME, MODEL_NAME)
+model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME,
+                                                            MODEL_NAME)
 tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
 
 # Freeze all layers in encoder
@@ -41,6 +41,8 @@ def freeze_decoder_weight(num_layers):
     for i in range(num_layers):
         for param in model.decoder.base_model.encoder.layer[i].parameters():
             param.requires_grad = False
+
+
 # Try freeze first 8 layers first
 freeze_decoder_weight(8)
 
@@ -72,9 +74,11 @@ model.num_beams = 4
 def map_to_encoder_decoder_inputs(batch):
     # Tokenizer will automatically set [BOS] <text> [EOS]
     # cut off at BERT max length 512
-    inputs = tokenizer(batch["short_text"], padding="max_length", truncation=True, max_length=512)
+    inputs = tokenizer(batch["short_text"], padding="max_length",
+                       truncation=True, max_length=512)
     # force summarization <= 128
-    outputs = tokenizer(batch["summary"], padding="max_length", truncation=True, max_length=128)
+    outputs = tokenizer(batch["summary"], padding="max_length",
+                        truncation=True, max_length=128)
 
     batch["input_ids"] = inputs.input_ids
     batch["attention_mask"] = inputs.attention_mask
@@ -101,7 +105,8 @@ def compute_metrics(pred):
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
 
-    rouge_output = rouge.compute(predictions=pred_str, references=label_str, rouge_types=["rouge2"])["rouge2"].mid
+    rouge_output = rouge.compute(predictions=pred_str, references=label_str, 
+                                 rouge_types=["rouge2"])["rouge2"].mid
 
     return {
         "rouge2_precision": round(rouge_output.precision, 4),
@@ -149,10 +154,14 @@ training_args = TrainingArguments(
 def compute_hybrid_reward(labels, outputs):
     return get_sentence_score("我是猪")
 
+
 prev_reward = 0
+
+
 class CustomizeTrainer(Trainer):
     # Override training step
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(self, model: nn.Module,
+                      inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
         Subclass and override to inject custom behavior.

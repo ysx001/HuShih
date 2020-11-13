@@ -4,7 +4,7 @@ import os
 import logging
 from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
                           TrainingArguments)
-from typing import Dict
+from typing import Dict, Union
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from lm_score.bert_lm import get_sentence_score

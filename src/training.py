@@ -174,7 +174,7 @@ if __name__ == '__main__':
                         type=str,
                         default=DEFAULT_OUTPUT_PATH)
     parser.add_argument('--batch_size',
-                        help='the batch size for training and validation,
+                        help='the batch size for training and validation',
                         type=str,
                         default=16)
     args = parser.parse_args()

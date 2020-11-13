@@ -38,32 +38,6 @@ def freeze_decoder_weight(num_layers):
             param.requires_grad = False
 
 
-# map data correctly
-def map_to_encoder_decoder_inputs(tokenizer, batch):
-    # Tokenizer will automatically set [BOS] <text> [EOS]
-    # cut off at BERT max length 512
-    inputs = tokenizer(batch["short_text"], padding="max_length",
-                       truncation=True, max_length=512)
-    # force summarization <= 128
-    outputs = tokenizer(batch["summary"], padding="max_length",
-                        truncation=True, max_length=128)
-
-    batch["input_ids"] = inputs.input_ids
-    batch["attention_mask"] = inputs.attention_mask
-
-    batch["decoder_input_ids"] = outputs.input_ids
-    batch["labels"] = outputs.input_ids.copy()
-    # mask loss for padding
-    batch["labels"] = [
-        [-100 if token == tokenizer.pad_token_id else token for token in labels] for labels in batch["labels"]
-    ]
-    batch["decoder_attention_mask"] = outputs.attention_mask
-
-    assert all([len(x) == 512 for x in inputs.input_ids])
-    assert all([len(x) == 128 for x in outputs.input_ids])
-
-    return batch
-
 
 def compute_metrics(pred):
     labels_ids = pred.label_ids
@@ -202,9 +176,35 @@ if __name__ == '__main__':
     # Load tokenizer
     tokenizer = BertTokenizer.from_pretrained(args.model_name)
 
+    # map data correctly
+    def map_to_encoder_decoder_inputs(batch):
+        # Tokenizer will automatically set [BOS] <text> [EOS]
+        # cut off at BERT max length 512
+        inputs = tokenizer(batch["short_text"], padding="max_length",
+                           truncation=True, max_length=512)
+        # force summarization <= 128
+        outputs = tokenizer(batch["summary"], padding="max_length",
+                            truncation=True, max_length=128)
+
+        batch["input_ids"] = inputs.input_ids
+        batch["attention_mask"] = inputs.attention_mask
+
+        batch["decoder_input_ids"] = outputs.input_ids
+        batch["labels"] = outputs.input_ids.copy()
+        # mask loss for padding
+        batch["labels"] = [
+            [-100 if token == tokenizer.pad_token_id else token for token in labels] for labels in batch["labels"]
+        ]
+        batch["decoder_attention_mask"] = outputs.attention_mask
+
+        assert all([len(x) == 512 for x in inputs.input_ids])
+        assert all([len(x) == 128 for x in outputs.input_ids])
+
+        return batch
+
     # make train dataset ready
     train_dataset = train_dataset.map(
-        lambda: map_to_encoder_decoder_inputs(tokenizer),
+        map_to_encoder_decoder_inputs,
         batched=True,
         batch_size=args.batch_size,
         remove_columns=["short_text", "summary"],

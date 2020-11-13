@@ -338,25 +338,23 @@ if __name__ == '__main__':
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
 
     # Load tokenizer
-    try:
-        if torch.cuda.device_count() > 0:
-            import sys
-            print('__Python VERSION:', sys.version)
-            print('__pyTorch VERSION:', torch.__version__)
-            print('__CUDA VERSION')
-            from subprocess import call
-            # call(["nvcc", "--version"]) does not work
-            print('__CUDNN VERSION:', torch.backends.cudnn.version())
-            print('__Number CUDA Devices:', torch.cuda.device_count())
-            print('__Devices')
-            call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
-            print('Active CUDA Device: GPU', torch.cuda.current_device())
+    if torch.cuda.device_count() > 0:
+        import sys
+        print('__Python VERSION:', sys.version)
+        print('__pyTorch VERSION:', torch.__version__)
+        print('__CUDA VERSION')
+        from subprocess import call
+        # call(["nvcc", "--version"]) does not work
+        print('__CUDNN VERSION:', torch.backends.cudnn.version())
+        print('__Number CUDA Devices:', torch.cuda.device_count())
+        print('__Devices')
+        call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
+        print('Active CUDA Device: GPU', torch.cuda.current_device())
 
-            print('Available devices ', torch.cuda.device_count())
-            print('Current cuda device ', torch.cuda.current_device())
-            with torch.cuda.device(0):
-                run(args, lcsts)
-        else:
+        print('Available devices ', torch.cuda.device_count())
+        print('Current cuda device ', torch.cuda.current_device())
+        with torch.cuda.device(0):
             run(args, lcsts)
-    except Exception as e:
-        LOG.error("something happened %s", e)
+    else:
+        run(args, lcsts)
+

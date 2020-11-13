@@ -120,7 +120,6 @@ def read_examples(input_file):
       if not line:
         break
       line = line.strip()
-      unique_id += 1
       examples.append(
         InputExample(unique_id, line))
       unique_id += 1
@@ -131,6 +130,25 @@ def read_sentence(sentence):
   line = tokenization.convert_to_unicode(sentence)
   line = line.strip()
   return [InputExample(0, line)]
+
+def read_sentences(sentences):
+  """read in a list of sentences.
+
+  Args:
+      sentences (list): a list of sentences.
+
+  Returns:
+      (list(InputExample)): list of parsed sentences.
+  """
+  examples = []
+  unique_id = 0
+  for sentence in sentences:
+    line = tokenization.convert_to_unicode(sentence)
+    line = line.strip()
+    examples.append(
+      InputExample(unique_id, line))
+    unique_id += 1
+  return examples
 
 def model_fn_builder(bert_config, init_checkpoint, use_tpu,
                      use_one_hot_embeddings):
@@ -512,11 +530,61 @@ def get_sentence_score(sentence, ppl, output_dir="log"):
       config=run_config,
       predict_batch_size=FLAGS.predict_batch_size)
   result = estimator.predict(input_fn=predict_input_fn)
-  tf.gfile.MakeDirs(output_dir)
+  tf.io.gfile.makedirs(output_dir)
   output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
   results = parse_result(result, all_tokens, output_predict_file)
   ppl.value = results["ppl"]
   print(ppl.value)
   return results["ppl"]
+
+def get_sentences_score(sentences, ppl, max_token_size=128, output_dir="log"):
+  """
+  Given a sentence, output the approximated perplexity score 
+  generated using BERT.
+  During the process, store the perplexity scores in local disk for 
+  future reference.
+
+  Args:
+      sentence (str): a sequence of characters to get perplexity.
+
+  Returns:
+      float: the perplexity score for the sentence passed in.
+  """
+  bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
+
+  if max_token_size > bert_config.max_position_embeddings:
+    return 0.0
+
+  predict_examples = read_sentences(sentences)
+  features, all_tokens = convert_examples_to_features(predict_examples,
+                                                      max_token_size,
+                                                      tokenizer)
+  run_config = tf.contrib.tpu.RunConfig(
+      cluster=None,
+      master=FLAGS.master,
+      model_dir=FLAGS.output_dir,
+      tpu_config=tf.contrib.tpu.TPUConfig(
+          num_shards=FLAGS.num_tpu_cores,
+          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2))
+  predict_input_fn = input_fn_builder(
+      features=features,
+      seq_length=FLAGS.max_seq_length,
+      max_predictions_per_seq=FLAGS.max_predictions_per_seq)
+  model_fn = model_fn_builder(
+      bert_config=bert_config,
+      init_checkpoint=FLAGS.init_checkpoint,
+      use_tpu=FLAGS.use_tpu,
+      use_one_hot_embeddings=FLAGS.use_tpu)
+  estimator = tf.contrib.tpu.TPUEstimator(
+      use_tpu=FLAGS.use_tpu,
+      model_fn=model_fn,
+      config=run_config,
+      predict_batch_size=FLAGS.predict_batch_size)
+  result = estimator.predict(input_fn=predict_input_fn)
+  tf.io.gfile.makedirs(output_dir)
+  output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
+  results = parse_result(result, all_tokens, output_predict_file)
+  
+  return sum[result['ppl'] for result in results]
 
 # print(get_sentence_score("我是猪"))

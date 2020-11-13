@@ -3,6 +3,7 @@ import nlp
 import os
 import logging
 import argparse
+from multiprocessing import Process, Value
 from typing import Dict, Union, Any
 import torch
 import torch.nn as nn
@@ -117,7 +118,12 @@ class CustomizeTrainer(Trainer):
             loss = loss / self.args.gradient_accumulation_steps
 
         # reward = compute_hybrid_reward(labels, outputs)
-        reward = get_sentence_score("我是猪")
+        reward_value = Value('d', 0.0)
+        p = Process(target=get_sentence_score, args=("我是猪", reward_value))
+        p.start()
+        p.join()
+        reward = reward_value.value
+        # reward = get_sentence_score("我是猪")
         LOG.info("got reward %s", reward)
         global prev_reward
         loss *= (reward - prev_reward)
@@ -262,24 +268,23 @@ if __name__ == '__main__':
 
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
 
-    import sys
-    print('__Python VERSION:', sys.version)
-    print('__pyTorch VERSION:', torch.__version__)
-    print('__CUDA VERSION')
-    from subprocess import call
-    # call(["nvcc", "--version"]) does not work
-    print('__CUDNN VERSION:', torch.backends.cudnn.version())
-    print('__Number CUDA Devices:', torch.cuda.device_count())
-    print('__Devices')
-    call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
-    print('Active CUDA Device: GPU', torch.cuda.current_device())
-
-    print('Available devices ', torch.cuda.device_count())
-    print('Current cuda device ', torch.cuda.current_device())
-
     # Load tokenizer
     try:
         with torch.cuda.device(1):
+            import sys
+            print('__Python VERSION:', sys.version)
+            print('__pyTorch VERSION:', torch.__version__)
+            print('__CUDA VERSION')
+            from subprocess import call
+            # call(["nvcc", "--version"]) does not work
+            print('__CUDNN VERSION:', torch.backends.cudnn.version())
+            print('__Number CUDA Devices:', torch.cuda.device_count())
+            print('__Devices')
+            call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
+            print('Active CUDA Device: GPU', torch.cuda.current_device())
+
+            print('Available devices ', torch.cuda.device_count())
+            print('Current cuda device ', torch.cuda.current_device())
             tokenizer = load_tokenizer(args.model_name)
             # load train and validation data
             # TODO: using test data to see stuffs working first

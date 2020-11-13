@@ -66,12 +66,32 @@ def compute_hybrid_reward(labels, outputs):
     Returns:
         [type]: [description]
     """
-    return get_sentence_score("我是猪")
+    # reward = 0
+    # for i in range(len(labels)):
+    #     rouge_output = rouge.compute(predictions=outputs[i], references=labels[i],
+    #                                 rouge_types=["rouge2"])["rouge2"].mid
+    #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
+    rouge_output = rouge.compute(predictions=outputs, references=labels,
+                                    rouge_types=["rouge2"])["rouge2"].mid
+    return round(rouge_output.fmeasure, 4) * get_sentence_score("我是猪")
 
 prev_reward = 0
-
-
+i = 0
 class CustomizeTrainer(Trainer):
+    def compute_loss(self, model, inputs):
+        """
+        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+        Subclass and override for custom behavior.
+        """
+        outputs = model(**inputs)
+        print("****outputs:", outputs[1].shape, outputs)
+        # Save past state if it exists
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+        # We don't use .loss here since the model may return tuples instead of ModelOutput.
+        # Also return the max vocab index on (batch_size, num_tokens). This is
+        # For use of decoding to Chinese words for this training step.
+        return outputs[0], outputs[1].argmax(2)
     # Override training step
     def training_step(self, model: nn.Module,
                       inputs: Dict[str,
@@ -105,9 +125,9 @@ class CustomizeTrainer(Trainer):
 
         if self.args.fp16 and _use_native_amp:
             with autocast():
-                loss = self.compute_loss(model, inputs)
+                loss, decode_ids = self.compute_loss(model, inputs)
         else:
-            loss = self.compute_loss(model, inputs)
+            loss, decode_ids = self.compute_loss(model, inputs)
 
         # mean() to average on multi-gpu parallel training
         if self.args.n_gpu > 1:
@@ -116,13 +136,21 @@ class CustomizeTrainer(Trainer):
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
 
-<<<<<<< HEAD
-        reward = compute_hybrid_reward(labels, self.get_output_embeddings())
-=======
-        # reward = compute_hybrid_reward(labels, outputs)
-        reward = get_sentence_score("我是猪")
+        print("*****inputs: ", inputs)
+        print("decode decoder input ids: ", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
+        print("decode input ids: ", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
+        print("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
+        print("decode current iteration softmax: ", tokenizer.batch_decode(decode_ids, skip_special_tokens=True))
+        global i
+        if i >= 4:
+            x=1/0
+        else:
+            i+=1
+        # x=1/0
+        label_decoded = tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True)
+        curr_iter_decoded = tokenizer.batch_decode(decode_ids, skip_special_tokens=True)
+        reward = compute_hybrid_reward(label_decoded, curr_iter_decoded)
         LOG.info("got reward %s", reward)
->>>>>>> a41949c57c297c71c4bb9aaa171c304231020128
         global prev_reward
         loss *= (reward - prev_reward)
         prev_reward = reward
@@ -268,7 +296,7 @@ if __name__ == '__main__':
 
     # Load tokenizer
     tokenizer = load_tokenizer(args.model_name)
-    
+
     # load train and validation data
     # TODO: using test data to see stuffs working first
     train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
@@ -281,7 +309,7 @@ if __name__ == '__main__':
     # load rouge for validation
     rouge = nlp.load_metric("rouge")
 
-    # set training arguments - these params are not really tuned, 
+    # set training arguments - these params are not really tuned,
     # feel free to change
     training_args = TrainingArguments(
         output_dir="./",

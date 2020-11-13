@@ -2,7 +2,7 @@
 import nlp
 import os
 import logging
-from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingArguments
+from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingArguments, Dict
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from lm_score.bert_lm import get_sentence_score 

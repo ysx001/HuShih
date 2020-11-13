@@ -74,7 +74,13 @@ def compute_hybrid_reward(labels, outputs):
     #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
     rouge_output = rouge.compute(predictions=outputs, references=labels,
                                     rouge_types=["rouge2"])["rouge2"].mid
-    return round(rouge_output.fmeasure, 4) * get_sentence_score("我是猪")
+    ppl_value = Value('d', 0.0)
+    p = Process(target=get_sentence_score, args=("我是猪", ppl_value))
+    p.start()
+    p.join()
+    ppl = ppl_value.value
+    print(ppl)
+    return round(rouge_output.fmeasure, 4) * ppl
 
 prev_reward = 0
 i = 0

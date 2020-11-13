@@ -10,3 +10,4 @@ torch==1.6.0
 torchvision==0.7.0
 scipy==1.1.0
 transformers==3.4.0
+rouge-score==0.0.4

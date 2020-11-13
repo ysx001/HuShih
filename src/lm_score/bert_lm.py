@@ -482,39 +482,40 @@ def get_sentence_score(sentence, output_dir="log"):
   Returns:
       float: the perplexity score for the sentence passed in.
   """
-  bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
-  if len(sentence) > bert_config.max_position_embeddings:
-    return 0.0
+  with tf.device('/device:GPU:1'):
+    bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
+    if len(sentence) > bert_config.max_position_embeddings:
+      return 0.0
 
-  predict_examples = read_sentence(sentence)
-  features, all_tokens = convert_examples_to_features(predict_examples,
-                                                      len(sentence),
-                                                      tokenizer)
-  run_config = tf.contrib.tpu.RunConfig(
-      cluster=None,
-      master=FLAGS.master,
-      model_dir=FLAGS.output_dir,
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          num_shards=FLAGS.num_tpu_cores,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2))
-  predict_input_fn = input_fn_builder(
-      features=features,
-      seq_length=FLAGS.max_seq_length,
-      max_predictions_per_seq=FLAGS.max_predictions_per_seq)
-  model_fn = model_fn_builder(
-      bert_config=bert_config,
-      init_checkpoint=FLAGS.init_checkpoint,
-      use_tpu=FLAGS.use_tpu,
-      use_one_hot_embeddings=FLAGS.use_tpu)
-  estimator = tf.contrib.tpu.TPUEstimator(
-      use_tpu=FLAGS.use_tpu,
-      model_fn=model_fn,
-      config=run_config,
-      predict_batch_size=FLAGS.predict_batch_size)
-  result = estimator.predict(input_fn=predict_input_fn)
-  tf.gfile.MakeDirs(output_dir)
-  output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
-  results = parse_result(result, all_tokens, output_predict_file)
-  return results["ppl"]
+    predict_examples = read_sentence(sentence)
+    features, all_tokens = convert_examples_to_features(predict_examples,
+                                                        len(sentence),
+                                                        tokenizer)
+    run_config = tf.contrib.tpu.RunConfig(
+        cluster=None,
+        master=FLAGS.master,
+        model_dir=FLAGS.output_dir,
+        tpu_config=tf.contrib.tpu.TPUConfig(
+            num_shards=FLAGS.num_tpu_cores,
+            per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2))
+    predict_input_fn = input_fn_builder(
+        features=features,
+        seq_length=FLAGS.max_seq_length,
+        max_predictions_per_seq=FLAGS.max_predictions_per_seq)
+    model_fn = model_fn_builder(
+        bert_config=bert_config,
+        init_checkpoint=FLAGS.init_checkpoint,
+        use_tpu=FLAGS.use_tpu,
+        use_one_hot_embeddings=FLAGS.use_tpu)
+    estimator = tf.contrib.tpu.TPUEstimator(
+        use_tpu=FLAGS.use_tpu,
+        model_fn=model_fn,
+        config=run_config,
+        predict_batch_size=FLAGS.predict_batch_size)
+    result = estimator.predict(input_fn=predict_input_fn)
+    tf.gfile.MakeDirs(output_dir)
+    output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
+    results = parse_result(result, all_tokens, output_predict_file)
+    return results["ppl"]
 
 # print(get_sentence_score("我是猪"))

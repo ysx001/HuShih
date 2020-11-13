@@ -123,6 +123,7 @@ class CustomizeTrainer(Trainer):
         p.start()
         p.join()
         reward = reward_value.value
+        print(reward)
         # reward = get_sentence_score("我是猪")
         LOG.info("got reward %s", reward)
         global prev_reward

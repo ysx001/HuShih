@@ -239,7 +239,7 @@ def load_tokenizer(model_name):
     return tokenizer
 
 
-def setup_model(model_name):
+def setup_model(model_name, tokenizer):
     model = EncoderDecoderModel.from_encoder_decoder_pretrained(model_name,
                                                                 model_name)
 
@@ -269,7 +269,7 @@ def run(args, lcsts):
                                                val_data_files=lcsts.test_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
-    model = setup_model(args.model_name)
+    model = setup_model(args.model_name, tokenizer)
     # load rouge for validation
     rouge = nlp.load_metric("rouge")
 

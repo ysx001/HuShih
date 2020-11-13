@@ -260,7 +260,6 @@ def setup_model(model_name, tokenizer):
     model.num_beams = 4
     return model
 
-tokenizer = load_tokenizer(DEFAULT_MODEL_NAME)
 
 def run(args, lcsts):
     # load train and validation data
@@ -270,9 +269,7 @@ def run(args, lcsts):
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, tokenizer)
-    # load rouge for validation
-    rouge = nlp.load_metric("rouge")
-
+    
     # set training arguments - these params are not really tuned,
     # feel free to change
     training_args = TrainingArguments(
@@ -336,6 +333,9 @@ if __name__ == '__main__':
                   output_path=args.preprocess_output_path)
 
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
+    tokenizer = load_tokenizer(args.model_name)
+    # load rouge for validation
+    rouge = nlp.load_metric("rouge")
 
     # Load tokenizer
     if torch.cuda.device_count() > 0:

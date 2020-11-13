@@ -178,10 +178,10 @@ def setup_dataset(train_data_files, val_data_files, tokenizer):
         # Tokenizer will automatically set [BOS] <text> [EOS]
         # cut off at BERT max length 512
         inputs = tokenizer(batch["short_text"], padding="max_length",
-                           truncation=True, max_length=512)
+                           truncation=True, max_length=128)
         # force summarization <= 128
         outputs = tokenizer(batch["summary"], padding="max_length",
-                            truncation=True, max_length=128)
+                            truncation=True, max_length=32)
 
         batch["input_ids"] = inputs.input_ids
         batch["attention_mask"] = inputs.attention_mask
@@ -194,8 +194,8 @@ def setup_dataset(train_data_files, val_data_files, tokenizer):
         ]
         batch["decoder_attention_mask"] = outputs.attention_mask
 
-        assert all([len(x) == 512 for x in inputs.input_ids])
-        assert all([len(x) == 128 for x in outputs.input_ids])
+        assert all([len(x) == 128 for x in inputs.input_ids])
+        assert all([len(x) == 32 for x in outputs.input_ids])
 
         return batch
 
@@ -297,59 +297,59 @@ if __name__ == '__main__':
 
     # Load tokenizer
     try:
-        with torch.cuda.device(1):
-            import sys
-            print('__Python VERSION:', sys.version)
-            print('__pyTorch VERSION:', torch.__version__)
-            print('__CUDA VERSION')
-            from subprocess import call
-            # call(["nvcc", "--version"]) does not work
-            print('__CUDNN VERSION:', torch.backends.cudnn.version())
-            print('__Number CUDA Devices:', torch.cuda.device_count())
-            print('__Devices')
-            call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
-            print('Active CUDA Device: GPU', torch.cuda.current_device())
+        # with torch.cuda.device(1):
+        import sys
+        # print('__Python VERSION:', sys.version)
+        # print('__pyTorch VERSION:', torch.__version__)
+        # print('__CUDA VERSION')
+        # from subprocess import call
+        # # call(["nvcc", "--version"]) does not work
+        # print('__CUDNN VERSION:', torch.backends.cudnn.version())
+        # print('__Number CUDA Devices:', torch.cuda.device_count())
+        # print('__Devices')
+        # call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
+        # print('Active CUDA Device: GPU', torch.cuda.current_device())
+        #
+        # print('Available devices ', torch.cuda.device_count())
+        # print('Current cuda device ', torch.cuda.current_device())
+        tokenizer = load_tokenizer(args.model_name)
+        # load train and validation data
+        # TODO: using test data to see stuffs working first
+        train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
+                                                   val_data_files=lcsts.test_merged_csv,
+                                                   tokenizer=tokenizer)
+        # setup model
+        model = setup_model(args.model_name)
+        # load rouge for validation
+        rouge = nlp.load_metric("rouge")
 
-            print('Available devices ', torch.cuda.device_count())
-            print('Current cuda device ', torch.cuda.current_device())
-            tokenizer = load_tokenizer(args.model_name)
-            # load train and validation data
-            # TODO: using test data to see stuffs working first
-            train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
-                                                       val_data_files=lcsts.test_merged_csv,
-                                                       tokenizer=tokenizer)
-            # setup model
-            model = setup_model(args.model_name)
-            # load rouge for validation
-            rouge = nlp.load_metric("rouge")
+        # set training arguments - these params are not really tuned,
+        # feel free to change
+        training_args = TrainingArguments(
+            output_dir="./",
+            per_device_train_batch_size=args.batch_size,
+            per_device_eval_batch_size=args.batch_size,
+            # predict_from_generate=True,
+            evaluate_during_training=True,
+            do_train=True,
+            do_eval=True,
+            logging_steps=1000,
+            save_steps=1000,
+            eval_steps=1000,
+            overwrite_output_dir=True,
+            warmup_steps=2000,
+            save_total_limit=10,
+        )
 
-            # set training arguments - these params are not really tuned,
-            # feel free to change
-            training_args = TrainingArguments(
-                output_dir="./",
-                per_device_train_batch_size=args.batch_size,
-                per_device_eval_batch_size=args.batch_size,
-                # predict_from_generate=True,
-                evaluate_during_training=True,
-                do_train=True,
-                do_eval=True,
-                logging_steps=1000,
-                save_steps=1000,
-                eval_steps=1000,
-                overwrite_output_dir=True,
-                warmup_steps=2000,
-                save_total_limit=10,
-            )
-
-            # instantiate trainer
-            trainer = CustomizeTrainer(
-                model=model,
-                args=training_args,
-                compute_metrics=compute_metrics,
-                train_dataset=train_dataset,
-                eval_dataset=val_dataset,
-            )
-            # start training
-            trainer.train()
+        # instantiate trainer
+        trainer = CustomizeTrainer(
+            model=model,
+            args=training_args,
+            compute_metrics=compute_metrics,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+        )
+        # start training
+        trainer.train()
     except Exception as e:
         LOG.error("something happened %s", e)

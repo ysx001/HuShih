@@ -117,8 +117,9 @@ class CustomizeTrainer(Trainer):
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
 
-        reward = compute_hybrid_reward(labels, outputs)
-        LOG.info("got reward ", reward)
+        # reward = compute_hybrid_reward(labels, outputs)
+        reward = get_sentence_score("我是猪")
+        LOG.info("got reward %s", reward)
         global prev_reward
         loss *= (reward - prev_reward)
         prev_reward = reward

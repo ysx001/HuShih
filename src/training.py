@@ -30,13 +30,12 @@ DEFAULT_OUTPUT_PATH = os.path.join(root, 'data')
 
 
 # Freeze embedding layers, and first N layers of decoder
-def freeze_decoder_weight(num_layers):
+def freeze_decoder_weight(model, num_layers):
     for param in model.decoder.base_model.embeddings.parameters():
         param.requires_grad = False
     for i in range(num_layers):
         for param in model.decoder.base_model.encoder.layer[i].parameters():
             param.requires_grad = False
-
 
 
 def compute_metrics(pred):
@@ -216,7 +215,7 @@ def setup_model(model_name):
         param.requires_grad = False
 
     # Try freeze first 8 layers in decoder first
-    freeze_decoder_weight(8)
+    freeze_decoder_weight(model, 8)
     # set decoding params
     model.config.decoder_start_token_id = tokenizer.bos_token_id
     model.config.eos_token_id = tokenizer.eos_token_id

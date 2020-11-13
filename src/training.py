@@ -262,6 +262,7 @@ if __name__ == '__main__':
 
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
 
+    import sys
     print('__Python VERSION:', sys.version)
     print('__pyTorch VERSION:', torch.__version__)
     print('__CUDA VERSION')
@@ -275,7 +276,7 @@ if __name__ == '__main__':
 
     print('Available devices ', torch.cuda.device_count())
     print('Current cuda device ', torch.cuda.current_device())
-    
+
     # Load tokenizer
     try:
         with torch.cuda.device(1):

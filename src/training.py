@@ -17,9 +17,9 @@ root = os.path.dirname(os.getcwd())
 # logging settings
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setLevel(log_level)
-LOG.addHandler(handler)
+# handler = logging.StreamHandler()
+# handler.setLevel(logging.INFO)
+# LOG.addHandler(handler)
 logging.basicConfig(level=logging.INFO)
 # constants
 DEFAULT_MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'

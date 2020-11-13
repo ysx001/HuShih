@@ -316,7 +316,7 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer):
 
   for (ex_index, example) in enumerate(examples):
     if ex_index % 10000 == 0:
-      tf.logging.info("Writing example %d of %d" % (ex_index, len(examples)))
+      tf.compat.v1.logging.info("Writing example %d of %d" % (ex_index, len(examples)))
 
     features, tokens = convert_single_example(ex_index, example,
                                      max_seq_length, tokenizer)
@@ -469,7 +469,7 @@ def parse_result(result, all_tokens, output_file=None):
       writer.write(json.dumps(sentences, indent=2, ensure_ascii=False))
     return sentence
 
-def get_sentence_score(sentence, output_dir="log"):
+def get_sentence_score(sentence, ppl, output_dir="log"):
   """
   Given a sentence, output the approximated perplexity score 
   generated using BERT.
@@ -515,6 +515,8 @@ def get_sentence_score(sentence, output_dir="log"):
   tf.gfile.MakeDirs(output_dir)
   output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
   results = parse_result(result, all_tokens, output_predict_file)
+  ppl.value = results["ppl"]
+  print(ppl.value)
   return results["ppl"]
 
 # print(get_sentence_score("我是猪"))

@@ -8,6 +8,7 @@ from typing import Dict, Union
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from lm_score.bert_lm import get_sentence_score
+import torch
 import torch.nn as nn
 
 MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'
@@ -191,8 +192,9 @@ class CustomizeTrainer(Trainer):
         else:
             loss = self.compute_loss(model, inputs)
 
+        # mean() to average on multi-gpu parallel training
         if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+            loss = loss.mean()
 
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps

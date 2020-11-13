@@ -2,38 +2,28 @@
 import nlp
 import os
 import logging
-from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
-                          TrainingArguments)
+import argparse
 from typing import Dict, Union, Any
-from datasets import load_dataset
-from data_utils.lcsts import LCSTS
-from lm_score.bert_lm import get_sentence_score
 import torch
 import torch.nn as nn
+from datasets import load_dataset
+from data_utils.lcsts import LCSTS
+from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
+                          TrainingArguments)
+from lm_score.bert_lm import get_sentence_score
 
-MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'
-
-root = os.path.dirname(os.getcwd())  # Get the root level dir
-training_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
-val_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
-test_path = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
-output_path = os.path.join(root, 'data')
-
-print(test_path)
-
-lcsts = LCSTS(training_path, val_path, test_path, output_path=output_path)
-_, _, merged_test_csv = lcsts.test_csv
-print("Test files saved to path {}".format(merged_test_csv))
-
+# Get the root level dir
+root = os.path.dirname(os.getcwd())
+# logging settings
+LOG = logging.getLogger(__name__).setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO)
+# constants
+DEFAULT_MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'
+DEFAULT_TRAINING_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
+DEFAULT_VAL_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
+DEFAULT_TEST_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
+DEFAULT_OUTPUT_PATH = os.path.join(root, 'data')
 
-model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME,
-                                                            MODEL_NAME)
-tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
-
-# Freeze all layers in encoder
-for param in model.encoder.base_model.parameters():
-    param.requires_grad = False
 
 # Freeze embedding layers, and first N layers of decoder
 def freeze_decoder_weight(num_layers):
@@ -42,33 +32,6 @@ def freeze_decoder_weight(num_layers):
     for i in range(num_layers):
         for param in model.decoder.base_model.encoder.layer[i].parameters():
             param.requires_grad = False
-
-
-# Try freeze first 8 layers first
-freeze_decoder_weight(8)
-
-# # CLS token will work as BOS token
-tokenizer.bos_token = tokenizer.cls_token
-#
-# # SEP token will work as EOS token
-tokenizer.eos_token = tokenizer.sep_token
-
-# load train and validation data
-train_dataset = load_dataset('csv', data_files=[merged_test_csv])['train']
-val_dataset = load_dataset('csv', data_files=[merged_test_csv])['train']  # placer_holder
-
-# load rouge for validation
-rouge = nlp.load_metric("rouge")
-
-# set decoding params
-model.config.decoder_start_token_id = tokenizer.bos_token_id
-model.config.eos_token_id = tokenizer.eos_token_id
-model.config.max_length = 142
-model.config.min_length = 56
-model.config.no_repeat_ngram_size = 3
-model.early_stopping = True
-model.length_penalty = 2.0
-model.num_beams = 4
 
 
 # map data correctly
@@ -106,7 +69,7 @@ def compute_metrics(pred):
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
 
-    rouge_output = rouge.compute(predictions=pred_str, references=label_str, 
+    rouge_output = rouge.compute(predictions=pred_str, references=label_str,
                                  rouge_types=["rouge2"])["rouge2"].mid
 
     return {
@@ -116,45 +79,17 @@ def compute_metrics(pred):
     }
 
 
-# set batch size here
-batch_size = 16
-
-# make train dataset ready
-train_dataset = train_dataset.map(
-    map_to_encoder_decoder_inputs, batched=True, batch_size=batch_size, remove_columns=["short_text", "summary"],
-)
-train_dataset.set_format(
-    type="torch", columns=["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"],
-)
-
-# same for validation dataset
-val_dataset = val_dataset.map(
-    map_to_encoder_decoder_inputs, batched=True, batch_size=batch_size, remove_columns=["short_text", "summary"],
-)
-val_dataset.set_format(
-    type="torch", columns=["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"],
-)
-
-# set training arguments - these params are not really tuned, feel free to change
-training_args = TrainingArguments(
-    output_dir="./",
-    per_device_train_batch_size=batch_size,
-    per_device_eval_batch_size=batch_size,
-    # predict_from_generate=True,
-    evaluate_during_training=True,
-    do_train=True,
-    do_eval=True,
-    logging_steps=1000,
-    save_steps=1000,
-    eval_steps=1000,
-    overwrite_output_dir=True,
-    warmup_steps=2000,
-    save_total_limit=10,
-)
-
 def compute_hybrid_reward(labels, outputs):
-    return get_sentence_score("我是猪")
+    """TODO: input real sentence here.
 
+    Args:
+        labels ([type]): [description]
+        outputs ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
+    return get_sentence_score("我是猪")
 
 prev_reward = 0
 
@@ -162,7 +97,8 @@ prev_reward = 0
 class CustomizeTrainer(Trainer):
     # Override training step
     def training_step(self, model: nn.Module,
-                      inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+                      inputs: Dict[str,
+                                   Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
         Subclass and override to inject custom behavior.
@@ -171,14 +107,18 @@ class CustomizeTrainer(Trainer):
                 The model to train.
             inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
-                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+                The dictionary will be unpacked before being fed to the model.
+                Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for
+                all accepted arguments.
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
         if hasattr(self, "_training_step"):
             warnings.warn(
-                "The `_training_step` method is deprecated and won't be called in a future version, define `training_step` in your subclass.",
+                "The `_training_step` method is deprecated \
+                and won't be called in a future version, \
+                define `training_step` in your subclass.",
                 FutureWarning,
             )
             return self._training_step(model, inputs, self.optimizer)
@@ -200,6 +140,7 @@ class CustomizeTrainer(Trainer):
             loss = loss / self.args.gradient_accumulation_steps
 
         reward = compute_hybrid_reward(labels, outputs)
+        LOG.info("got reward ", reward)
         global prev_reward
         loss *= (reward - prev_reward)
         prev_reward = reward
@@ -214,15 +155,129 @@ class CustomizeTrainer(Trainer):
 
         return loss.detach()
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--training_path',
+                        help='Where the training data (PART_I.txt) located',
+                        type=str,
+                        default=DEFAULT_TRAINING_PATH)
+    parser.add_argument('--val_path',
+                        help='Where the validation data (PART_II.txt) located',
+                        type=str,
+                        default=DEFAULT_VAL_PATH)
+    parser.add_argument('--test_path',
+                        help='Where the test data (PART_III.txt) located',
+                        type=str,
+                        default=DEFAULT_TEST_PATH)
+    parser.add_argument('--preprocess_output_path',
+                        help='where to output the processed data',
+                        type=str,
+                        default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument('--batch_size',
+                        help='the batch size for training and validation,
+                        type=str,
+                        default=16)
+    args = parser.parse_args()
+    LOG.info("Parsed arguments %s", args)
+    # LOG.info("Reading training set from %s", args.training_path)
+    # LOG.info("Reading validation set from %s", args.val_path)
+    # LOG.info("Reading test set from %s", args.test_path)
+    # LOG.info("Outputs data to %s", args.output_path)
 
-# instantiate trainer
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    compute_metrics=compute_metrics,
-    train_dataset=train_dataset,
-    eval_dataset=val_dataset,
-)
+    # Step 1: preprocess the dataset and load data
+    lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
+                  output_path=args.preprocess_output_path)
 
-# start training
-trainer.train()
+    LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
+
+    # load train and validation data
+    # TODO: using test data to see stuffs working first
+    train_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
+    val_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
+
+    # make train dataset ready
+    train_dataset = train_dataset.map(
+        map_to_encoder_decoder_inputs, batched=True,
+        batch_size=args.batch_size,
+        remove_columns=["short_text", "summary"],
+    )
+    train_dataset.set_format(
+        type="torch", columns=["input_ids",
+                               "attention_mask",
+                               "decoder_input_ids",
+                               "decoder_attention_mask",
+                               "labels"],
+    )
+    # same for validation dataset
+    val_dataset = val_dataset.map(
+        map_to_encoder_decoder_inputs,
+        batched=True,
+        batch_size=args.batch_size,
+        remove_columns=["short_text", "summary"],
+    )
+    val_dataset.set_format(
+        type="torch", columns=["input_ids",
+                               "attention_mask",
+                               "decoder_input_ids",
+                               "decoder_attention_mask",
+                               "labels"],
+    )
+
+    # Step 2: load model and tokenizer
+    model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME,
+                                                                MODEL_NAME)
+    tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
+
+    # CLS token will work as BOS token
+    tokenizer.bos_token = tokenizer.cls_token
+
+    # SEP token will work as EOS token
+    tokenizer.eos_token = tokenizer.sep_token
+
+    # Freeze all layers in encoder
+    for param in model.encoder.base_model.parameters():
+        param.requires_grad = False
+
+    # Try freeze first 8 layers in decoder first
+    freeze_decoder_weight(8)
+    # set decoding params
+    model.config.decoder_start_token_id = tokenizer.bos_token_id
+    model.config.eos_token_id = tokenizer.eos_token_id
+    model.config.max_length = 142
+    model.config.min_length = 56
+    model.config.no_repeat_ngram_size = 3
+    model.early_stopping = True
+    model.length_penalty = 2.0
+    model.num_beams = 4
+
+    # load rouge for validation
+    rouge = nlp.load_metric("rouge")
+
+    # set training arguments - these params are not really tuned, 
+    # feel free to change
+    training_args = TrainingArguments(
+        output_dir="./",
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
+        # predict_from_generate=True,
+        evaluate_during_training=True,
+        do_train=True,
+        do_eval=True,
+        logging_steps=1000,
+        save_steps=1000,
+        eval_steps=1000,
+        overwrite_output_dir=True,
+        warmup_steps=2000,
+        save_total_limit=10,
+    )
+
+    # instantiate trainer
+    trainer = CustomizeTrainer(
+        model=model,
+        args=training_args,
+        compute_metrics=compute_metrics,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+    )
+    # start training
+    trainer.train()

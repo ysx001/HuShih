@@ -10,6 +10,7 @@ import argparse
 import xml.etree.ElementTree as ET
 import numpy as np
 from data_utils.utils import split_unicode_chrs
+from data_utils.constants import FilePathTypes, UsageTypes
 # TODO: define an abstract class for datasets
 class LCSTS(object):
     """
@@ -22,58 +23,45 @@ class LCSTS(object):
     """
     def __init__(self, train_txt_file_path, val_txt_file_path,
                  test_txt_file_path, output_path="./"):
-        self._train_txt_file_path = train_txt_file_path
-        self._val_txt_file_path = val_txt_file_path
-        self._test_txt_file_path = test_txt_file_path
+        self._input_file_paths = dict()
+        self._input_file_paths[UsageTypes.TRAIN.value] = train_txt_file_path
+        self._input_file_paths[UsageTypes.VALIDATION.value] = val_txt_file_path
+        self._input_file_paths[UsageTypes.TEST.value] = test_txt_file_path
+        self._output_file_paths = dict()
+        self._output_file_paths[UsageTypes.TRAIN.value] = None
+        self._output_file_paths[UsageTypes.VALIDATION.value] = None
+        self._output_file_paths[UsageTypes.TEST.value] = None
         self._output_path = output_path
-        self._training_text_csv = None
-        self._training_summmary_csv = None
-        self._val_text_csv = None
-        self._val_summmary_csv = None
-        self._test_text_csv = None
-        self._test_summmary_csv = None
 
     @property
-    def training_csv(self):
-        """Get the training csv file path.
-
-        Returns:
-            str: the path for the training csv file
-        """
-        if self._training_text_csv is not None and self._training_summmary_csv is not None:
-            return self._training_text_csv, self._training_summmary_csv
-        xml_file_path = self._format_as_xml(self._train_txt_file_path, self._output_path)
-        self._training_text_csv, self._training_summmary_csv, self._training_merged_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="train")
-        return self._training_text_csv, self._training_summmary_csv, self._training_merged_csv
+    def training_merged_csv(self):
+        if self._output_file_paths[UsageTypes.TRAIN.value] is None:
+            self.process_csv(usage=UsageTypes.TRAIN.value)
+        return self._output_file_paths[UsageTypes.TRAIN.value][FilePathTypes.MERGED_FILE_PATH.value]
+    
+    @property
+    def val_merged_csv(self):
+        if self._output_file_paths[UsageTypes.VALIDATION.value] is None:
+            self.process_csv(usage=UsageTypes.VALIDATION.value)
+        return self._output_file_paths[UsageTypes.VALIDATION.value][FilePathTypes.MERGED_FILE_PATH.value]
 
     @property
-    def validation_csv(self):
-        """Get the validation csv files' path.
+    def test_merged_csv(self):
+        if self._output_file_paths[UsageTypes.TEST.value] is None:
+            self.process_csv(usage=UsageTypes.TEST.value)
+        return self._output_file_paths[UsageTypes.TEST.value][FilePathTypes.MERGED_FILE_PATH.value]
 
-        Returns:
-            str: the path for the validation csv file
-        """
-        if self._val_text_csv is not None and self._val_summmary_csv is not None:
-            return self._val_text_csv, self._val_summmary_csv
-        xml_file_path = self._format_as_xml(self._val_txt_file_path, self._output_path)
-        self._val_text_csv, self._val_summmary_csv, self._val_merged_csv= self._parse_xml_to_csv(xml_file_path, self._output_path, usage="val")
-        return self._val_text_csv, self._val_summmary_csv, self._val_merged_csv
-
-    @property
-    def test_csv(self):
-        """Get the validation csv files' path.
-
-        Returns:
-            str: the path for the validation csv file
-        """
-        if self._test_text_csv is not None and self._test_summmary_csv is not None:
-            return self._test_text_csv, self._test_summmary_csv
-        xml_file_path = self._format_as_xml(self._test_txt_file_path, self._output_path)
-        self._test_text_csv, self._test_summmary_csv, self._test_merged_csv = self._parse_xml_to_csv(xml_file_path, self._output_path, usage="test")
-        return self._test_text_csv, self._test_summmary_csv, self._test_merged_csv
+    def process_csv(self, usage):
+        xml_file_path = self._format_as_xml(self._input_file_paths[usage],
+                                            self._output_path)
+        output_dict = self._parse_xml_to_csv(xml_file_path,
+                                             self._output_path,
+                                             usage=usage)
+        self._output_file_paths[usage] = output_dict
 
     def get_random_permutation(self):
-        return self._generate_rand_permutation(self.training_csv, self._output_path)
+        return self._generate_rand_permutation(self.training_csv,
+                                               self._output_path)
 
     def _format_as_xml(self, txt_file_path, output_path):
         """The input file that LCSTS provides has a format that looks like xml
@@ -183,14 +171,19 @@ class LCSTS(object):
         # save the merged files
         merged_keys = merged[0].keys()
         merged_file_path = os.path.join(output_path, usage + '_merged.csv')
-        with open(merged_file_path, 'w', newline='')  as output_file:
+        with open(merged_file_path, 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, merged_keys)
             dict_writer.writeheader()
             dict_writer.writerows(merged)
-        return text_file_path, summmary_file_path, merged_file_path
+        file_path_dict = dict()
+        file_path_dict[FilePathTypes.TEXT_FILE_PATH.value] = text_file_path
+        file_path_dict[FilePathTypes.SUMMARY_FILE_PATH.value] = summmary_file_path
+        file_path_dict[FilePathTypes.MERGED_FILE_PATH.value] = merged_file_path
+        return file_path_dict
 
     def _generate_rand_permutation(self, text_csv, output_path,
-                                   output_file_name="rand_permutation.csv", num_perm=10):
+                                   output_file_name="rand_permutation.csv",
+                                   num_perm=10):
         """Generate random permutations of data given text csv file.
 
         Args:

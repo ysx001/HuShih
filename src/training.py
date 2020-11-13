@@ -179,8 +179,12 @@ if __name__ == '__main__':
                         default=DEFAULT_OUTPUT_PATH)
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
-                        type=str,
+                        type=int,
                         default=16)
+    parser.add_argument('--model_name',
+                        help='the batch size for training and validation',
+                        type=str,
+                        default=DEFAULT_MODEL_NAME)
     args = parser.parse_args()
     LOG.info("Parsed arguments %s", args)
 
@@ -196,7 +200,7 @@ if __name__ == '__main__':
     val_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
 
     # Load tokenizer
-    tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = BertTokenizer.from_pretrained(args.model_name)
 
     # make train dataset ready
     train_dataset = train_dataset.map(
@@ -228,8 +232,8 @@ if __name__ == '__main__':
     )
 
     # Step 2: load model and tokenizer
-    model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME,
-                                                                MODEL_NAME)
+    model = EncoderDecoderModel.from_encoder_decoder_pretrained(args.model_name,
+                                                                args.model_name)
     # CLS token will work as BOS token
     tokenizer.bos_token = tokenizer.cls_token
 

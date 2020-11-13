@@ -39,7 +39,7 @@ def freeze_decoder_weight(num_layers):
 
 
 # map data correctly
-def map_to_encoder_decoder_inputs(batch):
+def map_to_encoder_decoder_inputs(tokenizer, batch):
     # Tokenizer will automatically set [BOS] <text> [EOS]
     # cut off at BERT max length 512
     inputs = tokenizer(batch["short_text"], padding="max_length",
@@ -195,9 +195,13 @@ if __name__ == '__main__':
     train_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
     val_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
 
+    # Load tokenizer
+    tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
+
     # make train dataset ready
     train_dataset = train_dataset.map(
-        map_to_encoder_decoder_inputs, batched=True,
+        lambda: map_to_encoder_decoder_inputs(tokenizer),
+        batched=True,
         batch_size=args.batch_size,
         remove_columns=["short_text", "summary"],
     )
@@ -226,8 +230,6 @@ if __name__ == '__main__':
     # Step 2: load model and tokenizer
     model = EncoderDecoderModel.from_encoder_decoder_pretrained(MODEL_NAME,
                                                                 MODEL_NAME)
-    tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
-
     # CLS token will work as BOS token
     tokenizer.bos_token = tokenizer.cls_token
 

@@ -39,24 +39,6 @@ def freeze_decoder_weight(model, num_layers):
             param.requires_grad = False
 
 
-def compute_metrics(pred):
-    labels_ids = pred.label_ids
-    pred_ids = pred.predictions
-
-    # all unnecessary tokens are removed
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-
-    rouge_output = rouge.compute(predictions=pred_str, references=label_str,
-                                 rouge_types=["rouge2"])["rouge2"].mid
-
-    return {
-        "rouge2_precision": round(rouge_output.precision, 4),
-        "rouge2_recall": round(rouge_output.recall, 4),
-        "rouge2_fmeasure": round(rouge_output.fmeasure, 4),
-    }
-
-
 def compute_hybrid_reward(labels, outputs):
     """TODO: input real sentence here.
 
@@ -74,7 +56,12 @@ def compute_hybrid_reward(labels, outputs):
     #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
     rouge_output = rouge.compute(predictions=outputs, references=labels,
                                     rouge_types=["rouge2"])["rouge2"].mid
-    return round(rouge_output.fmeasure, 4) * get_sentence_score("我是猪")
+    ppl_value = Value('d', 0.0)
+    p = get_sentence_score("我是猪", ppl_value)
+    ppl = ppl.value
+    rouge = round(rouge_output.fmeasure, 4)
+    LOG.info("rouge %s, ppl %s", rouge, ppl)
+    return rouge - ppl
 
 prev_reward = 0
 i = 0
@@ -290,6 +277,23 @@ def run(args, lcsts):
         warmup_steps=2000,
         save_total_limit=10,
     )
+
+    def compute_metrics(pred):
+        labels_ids = pred.label_ids
+        pred_ids = pred.predictions
+
+        # all unnecessary tokens are removed
+        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+
+        rouge_output = rouge.compute(predictions=pred_str, references=label_str,
+                                     rouge_types=["rouge2"])["rouge2"].mid
+
+        return {
+            "rouge2_precision": round(rouge_output.precision, 4),
+            "rouge2_recall": round(rouge_output.recall, 4),
+            "rouge2_fmeasure": round(rouge_output.fmeasure, 4),
+        }
 
     # instantiate trainer
     trainer = CustomizeTrainer(

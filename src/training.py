@@ -39,6 +39,24 @@ def freeze_decoder_weight(model, num_layers):
             param.requires_grad = False
 
 
+def compute_metrics(pred):
+    labels_ids = pred.label_ids
+    pred_ids = pred.predictions
+
+    # all unnecessary tokens are removed
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+
+    rouge_output = rouge.compute(predictions=pred_str, references=label_str,
+                                 rouge_types=["rouge2"])["rouge2"].mid
+
+    return {
+        "rouge2_precision": round(rouge_output.precision, 4),
+        "rouge2_recall": round(rouge_output.recall, 4),
+        "rouge2_fmeasure": round(rouge_output.fmeasure, 4),
+    }
+
+
 def compute_hybrid_reward(labels, outputs):
     """TODO: input real sentence here.
 
@@ -56,12 +74,7 @@ def compute_hybrid_reward(labels, outputs):
     #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
     rouge_output = rouge.compute(predictions=outputs, references=labels,
                                     rouge_types=["rouge2"])["rouge2"].mid
-    ppl_value = Value('d', 0.0)
-    p = get_sentence_score("我是猪", ppl_value)
-    ppl = ppl.value
-    rouge = round(rouge_output.fmeasure, 4)
-    LOG.info("rouge %s, ppl %s", rouge, ppl)
-    return rouge - ppl
+    return round(rouge_output.fmeasure, 4) * get_sentence_score("我是猪")
 
 prev_reward = 0
 i = 0
@@ -278,23 +291,6 @@ def run(args, lcsts):
         save_total_limit=10,
     )
 
-    def compute_metrics(pred):
-        labels_ids = pred.label_ids
-        pred_ids = pred.predictions
-
-        # all unnecessary tokens are removed
-        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-        label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-
-        rouge_output = rouge.compute(predictions=pred_str, references=label_str,
-                                     rouge_types=["rouge2"])["rouge2"].mid
-
-        return {
-            "rouge2_precision": round(rouge_output.precision, 4),
-            "rouge2_recall": round(rouge_output.recall, 4),
-            "rouge2_fmeasure": round(rouge_output.fmeasure, 4),
-        }
-
     # instantiate trainer
     trainer = CustomizeTrainer(
         model=model,
@@ -342,64 +338,7 @@ if __name__ == '__main__':
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
 
     # Load tokenizer
-<<<<<<< HEAD
     try:
-<<<<<<< HEAD
-        # with torch.cuda.device(1):
-        import sys
-        # print('__Python VERSION:', sys.version)
-        # print('__pyTorch VERSION:', torch.__version__)
-        # print('__CUDA VERSION')
-        # from subprocess import call
-        # # call(["nvcc", "--version"]) does not work
-        # print('__CUDNN VERSION:', torch.backends.cudnn.version())
-        # print('__Number CUDA Devices:', torch.cuda.device_count())
-        # print('__Devices')
-        # call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
-        # print('Active CUDA Device: GPU', torch.cuda.current_device())
-        #
-        # print('Available devices ', torch.cuda.device_count())
-        # print('Current cuda device ', torch.cuda.current_device())
-        tokenizer = load_tokenizer(args.model_name)
-        # load train and validation data
-        # TODO: using test data to see stuffs working first
-        train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
-                                                   val_data_files=lcsts.test_merged_csv,
-                                                   tokenizer=tokenizer)
-        # setup model
-        model = setup_model(args.model_name)
-        # load rouge for validation
-        rouge = nlp.load_metric("rouge")
-
-        # set training arguments - these params are not really tuned,
-        # feel free to change
-        training_args = TrainingArguments(
-            output_dir="./",
-            per_device_train_batch_size=args.batch_size,
-            per_device_eval_batch_size=args.batch_size,
-            # predict_from_generate=True,
-            evaluate_during_training=True,
-            do_train=True,
-            do_eval=True,
-            logging_steps=1000,
-            save_steps=1000,
-            eval_steps=1000,
-            overwrite_output_dir=True,
-            warmup_steps=2000,
-            save_total_limit=10,
-        )
-
-        # instantiate trainer
-        trainer = CustomizeTrainer(
-            model=model,
-            args=training_args,
-            compute_metrics=compute_metrics,
-            train_dataset=train_dataset,
-            eval_dataset=val_dataset,
-        )
-        # start training
-        trainer.train()
-=======
         if torch.cuda.device_count() > 0:
             import sys
             print('__Python VERSION:', sys.version)
@@ -419,27 +358,5 @@ if __name__ == '__main__':
                 run(args, lcsts)
         else:
             run(args, lcsts)
->>>>>>> 136190d2bd65c5b7c7eaaf1a816b0fe5516b6a26
     except Exception as e:
         LOG.error("something happened %s", e)
-=======
-    if torch.cuda.device_count() > 0:
-        import sys
-        print('__Python VERSION:', sys.version)
-        print('__pyTorch VERSION:', torch.__version__)
-        print('__CUDA VERSION')
-        from subprocess import call
-        # call(["nvcc", "--version"]) does not work
-        print('__CUDNN VERSION:', torch.backends.cudnn.version())
-        print('__Number CUDA Devices:', torch.cuda.device_count())
-        print('__Devices')
-        call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
-        print('Active CUDA Device: GPU', torch.cuda.current_device())
-
-        print('Available devices ', torch.cuda.device_count())
-        print('Current cuda device ', torch.cuda.current_device())
-        with torch.cuda.device(0):
-            run(args, lcsts)
-    else:
-        run(args, lcsts)
->>>>>>> a521a0812cc6faff7625550dd520d699aa0c82e8

@@ -134,48 +134,12 @@ class CustomizeTrainer(Trainer):
 
         return loss.detach()
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--training_path',
-                        help='Where the training data (PART_I.txt) located',
-                        type=str,
-                        default=DEFAULT_TRAINING_PATH)
-    parser.add_argument('--val_path',
-                        help='Where the validation data (PART_II.txt) located',
-                        type=str,
-                        default=DEFAULT_VAL_PATH)
-    parser.add_argument('--test_path',
-                        help='Where the test data (PART_III.txt) located',
-                        type=str,
-                        default=DEFAULT_TEST_PATH)
-    parser.add_argument('--preprocess_output_path',
-                        help='where to output the processed data',
-                        type=str,
-                        default=DEFAULT_OUTPUT_PATH)
-    parser.add_argument('--batch_size',
-                        help='the batch size for training and validation',
-                        type=int,
-                        default=16)
-    parser.add_argument('--model_name',
-                        help='the batch size for training and validation',
-                        type=str,
-                        default=DEFAULT_MODEL_NAME)
-    args = parser.parse_args()
-    LOG.info("Parsed arguments %s", args)
 
-    # Step 1: preprocess the dataset and load data
-    lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
-                  output_path=args.preprocess_output_path)
-
-    LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
-
+def setup_dataset(train_data_files, val_data_files, tokenizer):
     # load train and validation data
     # TODO: using test data to see stuffs working first
-    train_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
-    val_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
-
-    # Load tokenizer
-    tokenizer = BertTokenizer.from_pretrained(args.model_name)
+    train_dataset = load_dataset('csv', data_files=[train_data_files])['train']
+    val_dataset = load_dataset('csv', data_files=[val_data_files])['train']
 
     # map data correctly
     def map_to_encoder_decoder_inputs(batch):
@@ -231,15 +195,21 @@ if __name__ == '__main__':
                                "decoder_attention_mask",
                                "labels"],
     )
+    return train_dataset, val_dataset
 
-    # Step 2: load model and tokenizer
-    model = EncoderDecoderModel.from_encoder_decoder_pretrained(args.model_name,
-                                                                args.model_name)
+
+def load_tokenizer(model_name):
+    tokenizer = BertTokenizer.from_pretrained(model_name)
     # CLS token will work as BOS token
     tokenizer.bos_token = tokenizer.cls_token
-
     # SEP token will work as EOS token
     tokenizer.eos_token = tokenizer.sep_token
+    return tokenizer
+
+
+def setup_model(model_name):
+    model = EncoderDecoderModel.from_encoder_decoder_pretrained(model_name,
+                                                                model_name)
 
     # Freeze all layers in encoder
     for param in model.encoder.base_model.parameters():
@@ -256,6 +226,54 @@ if __name__ == '__main__':
     model.early_stopping = True
     model.length_penalty = 2.0
     model.num_beams = 4
+    return model
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--training_path',
+                        help='Where the training data (PART_I.txt) located',
+                        type=str,
+                        default=DEFAULT_TRAINING_PATH)
+    parser.add_argument('--val_path',
+                        help='Where the validation data (PART_II.txt) located',
+                        type=str,
+                        default=DEFAULT_VAL_PATH)
+    parser.add_argument('--test_path',
+                        help='Where the test data (PART_III.txt) located',
+                        type=str,
+                        default=DEFAULT_TEST_PATH)
+    parser.add_argument('--preprocess_output_path',
+                        help='where to output the processed data',
+                        type=str,
+                        default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument('--batch_size',
+                        help='the batch size for training and validation',
+                        type=int,
+                        default=16)
+    parser.add_argument('--model_name',
+                        help='the batch size for training and validation',
+                        type=str,
+                        default=DEFAULT_MODEL_NAME)
+    args = parser.parse_args()
+    LOG.info("Parsed arguments %s", args)
+
+    # Step 1: preprocess the dataset and load data
+    lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
+                  output_path=args.preprocess_output_path)
+
+    LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
+
+    # Load tokenizer
+    tokenizer = load_tokenizer(args.model_name)
+    
+    # load train and validation data
+    # TODO: using test data to see stuffs working first
+    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
+                                               val_data_files=lcsts.test_merged_csv,
+                                               tokenizer=tokenizer)
+
+    # setup model
+    model = setup_model(args.model_name)
 
     # load rouge for validation
     rouge = nlp.load_metric("rouge")

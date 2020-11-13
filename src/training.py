@@ -263,45 +263,46 @@ if __name__ == '__main__':
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
 
     # Load tokenizer
-    tokenizer = load_tokenizer(args.model_name)
-    
-    # load train and validation data
-    # TODO: using test data to see stuffs working first
-    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
-                                               val_data_files=lcsts.test_merged_csv,
-                                               tokenizer=tokenizer)
+    try:
+        with torch.cuda.device(1):
+            tokenizer = load_tokenizer(args.model_name)
+            # load train and validation data
+            # TODO: using test data to see stuffs working first
+            train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
+                                                       val_data_files=lcsts.test_merged_csv,
+                                                       tokenizer=tokenizer)
+            # setup model
+            model = setup_model(args.model_name)
+            # load rouge for validation
+            rouge = nlp.load_metric("rouge")
 
-    # setup model
-    model = setup_model(args.model_name)
+            # set training arguments - these params are not really tuned,
+            # feel free to change
+            training_args = TrainingArguments(
+                output_dir="./",
+                per_device_train_batch_size=args.batch_size,
+                per_device_eval_batch_size=args.batch_size,
+                # predict_from_generate=True,
+                evaluate_during_training=True,
+                do_train=True,
+                do_eval=True,
+                logging_steps=1000,
+                save_steps=1000,
+                eval_steps=1000,
+                overwrite_output_dir=True,
+                warmup_steps=2000,
+                save_total_limit=10,
+            )
 
-    # load rouge for validation
-    rouge = nlp.load_metric("rouge")
-
-    # set training arguments - these params are not really tuned, 
-    # feel free to change
-    training_args = TrainingArguments(
-        output_dir="./",
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        # predict_from_generate=True,
-        evaluate_during_training=True,
-        do_train=True,
-        do_eval=True,
-        logging_steps=1000,
-        save_steps=1000,
-        eval_steps=1000,
-        overwrite_output_dir=True,
-        warmup_steps=2000,
-        save_total_limit=10,
-    )
-
-    # instantiate trainer
-    trainer = CustomizeTrainer(
-        model=model,
-        args=training_args,
-        compute_metrics=compute_metrics,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-    )
-    # start training
-    trainer.train()
+            # instantiate trainer
+            trainer = CustomizeTrainer(
+                model=model,
+                args=training_args,
+                compute_metrics=compute_metrics,
+                train_dataset=train_dataset,
+                eval_dataset=val_dataset,
+            )
+            # start training
+            trainer.train()
+    except Exception as e:
+        LOG.error("something happened %s", e)

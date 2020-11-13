@@ -15,7 +15,11 @@ from lm_score.bert_lm import get_sentence_score
 # Get the root level dir
 root = os.path.dirname(os.getcwd())
 # logging settings
-LOG = logging.getLogger(__name__).setLevel(logging.INFO)
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setLevel(log_level)
+LOG.addHandler(handler)
 logging.basicConfig(level=logging.INFO)
 # constants
 DEFAULT_MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'

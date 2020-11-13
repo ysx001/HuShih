@@ -260,9 +260,9 @@ def setup_model(model_name, tokenizer):
     model.num_beams = 4
     return model
 
+tokenizer = load_tokenizer(DEFAULT_MODEL_NAME)
 
 def run(args, lcsts):
-    tokenizer = load_tokenizer(args.model_name)
     # load train and validation data
     # TODO: using test data to see stuffs working first
     train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,

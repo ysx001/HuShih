@@ -338,7 +338,7 @@ def run(args, lcsts):
     # set training arguments - these params are not really tuned,
     # feel free to change
     training_args = TrainingArguments(
-        output_dir="./",
+        output_dir="./ckpt/",
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         # predict_from_generate=True,
@@ -363,6 +363,7 @@ def run(args, lcsts):
     )
     # start training
     trainer.train()
+    # trainer.train("checkpoint-9500")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

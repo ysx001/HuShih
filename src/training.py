@@ -101,11 +101,12 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
     print("ppl before normalize", ppl_values[:])
     ppl = np.asarray(ppl_values[:])
     # normalize ppl score
-    ppl = 2 * np.tanh(-ppl)
+    ppl = 2 * sigmoid(-ppl)
     print("ppl after normalize", ppl)
     return rouge_scores + ppl
 
-
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 class CustomizeEncoderDecoder(EncoderDecoderModel):
     def forward(
         self,

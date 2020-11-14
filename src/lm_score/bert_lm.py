@@ -537,7 +537,7 @@ def get_sentence_score(sentence, ppl, output_dir="log"):
   print(ppl.value)
   return results["ppl"]
 
-def get_sentences_score(sentences, ppl, max_token_size=128, output_dir="log"):
+def get_sentences_scores(sentences, ppl, max_token_size=128, output_dir="log"):
   """
   Given a sentence, output the approximated perplexity score 
   generated using BERT.

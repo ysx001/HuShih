@@ -1,17 +1,21 @@
 # %%
 import nlp
+import imp
+print("nlp module", imp.find_module("nlp"))
 import os
 import logging
 import argparse
-from multiprocessing import Process, Value
+from collections import defaultdict 
+from multiprocessing import Process, Array
 from typing import Dict, Union, Any
 import torch
 import torch.nn as nn
+import numpy as np
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
                           TrainingArguments)
-from lm_score.bert_lm import get_sentence_score
+from lm_score.bert_lm import get_sentences_scores
 
 # Get the root level dir
 root = os.path.dirname(os.getcwd())
@@ -28,6 +32,7 @@ DEFAULT_TRAINING_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
 DEFAULT_VAL_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
 DEFAULT_TEST_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
 DEFAULT_OUTPUT_PATH = os.path.join(root, 'data')
+REWARD_MAP = defaultdict(float)
 
 
 # Freeze embedding layers, and first N layers of decoder
@@ -57,7 +62,7 @@ def compute_metrics(pred):
     }
 
 
-def compute_hybrid_reward(labels, outputs):
+def compute_hybrid_rewards(inputs_labels, decode_ids):
     """TODO: input real sentence here.
 
     Args:
@@ -72,17 +77,32 @@ def compute_hybrid_reward(labels, outputs):
     #     rouge_output = rouge.compute(predictions=outputs[i], references=labels[i],
     #                                 rouge_types=["rouge2"])["rouge2"].mid
     #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
-    rouge_output = rouge.compute(predictions=outputs, references=labels,
-                                 rouge_types=["rouge2"])["rouge2"].mid
-    ppl_value = Value('d', 0.0)
-    p = Process(target=get_sentence_score, args=("我是猪", ppl_value))
+    # label_decoded = tokenizer.batch_decode(inputs['labels'],
+    #                                        skip_special_tokens=True)
+    curr_iter_decoded = tokenizer.batch_decode(decode_ids,
+                                               skip_special_tokens=True)
+    pred = [" ".join(map(str, decode_id)) for decode_id in decode_ids.tolist()]
+    ref = [" ".join(map(str, input_label)) for input_label in inputs_labels.tolist()]
+    rouge_outputs = rouge.compute(predictions=pred, references=ref,
+                                  rouge_types=["rouge2", "rouge1", "rougeL"],
+                                  use_agregator=False)
+    rouge_scores = [0.0] * len(pred)
+    for rouge_value in rouge_outputs.values():
+        c = 0
+        for score in rouge_value:
+            rouge_scores[c] += score.fmeasure
+            c += 1
+    rouge_scores = np.asarray(rouge_scores) / 3
+    print(rouge_scores)
+    ppl_values = Array('d', [0.0] * len(rouge_scores))
+    p = Process(target=get_sentences_scores, args=(curr_iter_decoded, ppl_values))
     p.start()
     p.join()
-    ppl = ppl_value.value
+    ppl = np.asarray(ppl_values[:])
+    # normalize ppl score
+    ppl = 2 * np.tanh(-ppl)
     print(ppl)
-    return round(rouge_output.fmeasure, 4) * ppl
-
-prev_reward = 0
+    return rouge_scores + ppl
 
 
 class CustomizeEncoderDecoder(EncoderDecoderModel):
@@ -118,7 +138,6 @@ class CustomizeEncoderDecoder(EncoderDecoderModel):
                                output_hidden_states=output_hidden_states,
                                return_dict=return_dict,
                                **kwargs,)
-
 
 class CustomizeTrainer(Trainer):
     def compute_loss(self, model, inputs):
@@ -188,15 +207,17 @@ class CustomizeTrainer(Trainer):
         print("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
         print("decode current iteration softmax: ", tokenizer.batch_decode(decode_ids, skip_special_tokens=True))
         # raise Exception("stop here")
-        label_decoded = tokenizer.batch_decode(inputs['labels'],
-                                               skip_special_tokens=True)
-        curr_iter_decoded = tokenizer.batch_decode(decode_ids,
-                                                   skip_special_tokens=True)
-        reward = compute_hybrid_reward(label_decoded, curr_iter_decoded)
-        LOG.info("got reward %s", reward)
-        global prev_reward
-        loss *= (reward - prev_reward)
-        prev_reward = reward
+
+        rewards = compute_hybrid_rewards(inputs['labels'], decode_ids)
+        LOG.info("got reward %s", rewards)
+        # compute current aggregated reward
+        current_ids = inputs['id'].tolist()
+        prev_reward = sum([REWARD_MAP[idx] for idx in current_ids])
+        curr_reward = sum(rewards)
+        loss *= (curr_reward - prev_reward)
+        # store current iterations's reward in to cache
+        for i in range(len(rewards)):
+            REWARD_MAP[current_ids[i]] = rewards[i]
 
         if self.args.fp16 and _use_native_amp:
             self.scaler.scale(loss).backward()

@@ -5,7 +5,7 @@ print("nlp module", imp.find_module("nlp"))
 import os
 import logging
 import argparse
-from collections import defaultdict 
+from collections import defaultdict
 from multiprocessing import Process, Array
 from typing import Dict, Union, Any
 import torch
@@ -305,7 +305,7 @@ def load_tokenizer(model_name):
     return tokenizer
 
 
-def setup_model(model_name, tokenizer):
+def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
     model = CustomizeEncoderDecoder.from_encoder_decoder_pretrained(model_name,
                                                                     model_name)
 
@@ -314,7 +314,7 @@ def setup_model(model_name, tokenizer):
         param.requires_grad = False
 
     # Try freeze first 8 layers in decoder first
-    freeze_decoder_weight(model, 8)
+    freeze_decoder_weight(model, num_freeze_decoder_layers)
     # set decoding params
     model.config.decoder_start_token_id = tokenizer.bos_token_id
     model.config.eos_token_id = tokenizer.eos_token_id
@@ -333,7 +333,7 @@ def run(args, lcsts):
                                                val_data_files=lcsts.test_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
-    model = setup_model(args.model_name, tokenizer)
+    model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)
 
     # set training arguments - these params are not really tuned,
     # feel free to change
@@ -386,6 +386,10 @@ if __name__ == '__main__':
                         help='the batch size for training and validation',
                         type=int,
                         default=16)
+    parser.add_argument('--num_freeze_decoder_layers',
+                        help='the number of decoder layers to freeze',
+                        type=int,
+                        default=8)
     parser.add_argument('--model_name',
                         help='the batch size for training and validation',
                         type=str,

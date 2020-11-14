@@ -75,6 +75,9 @@ class LCSTS(object):
         Returns:
             str: The location of the output xml files.
         """
+        xml_file_path = os.path.join(output_path, base_name + '.xml')
+        if path.exists(xml_file_path):
+            return xml_file_path
         # Read in the file
         with open(txt_file_path, 'r', encoding="utf-8") as f:
             filedata = f.read()
@@ -83,7 +86,6 @@ class LCSTS(object):
         # Replace <doc id=1> to <doc id="1"> to complie with xml format
         fixed = re.sub(r'<doc id=([0-9]+)>', r'<doc id="\1">', filedata)
 
-        xml_file_path = os.path.join(output_path, base_name + '.xml')
         # Write the file out again
         with open(xml_file_path, 'w') as f:
             f.write("<?xml version=\"1.0\"?>\n<data>\n")

@@ -73,7 +73,7 @@ def compute_hybrid_reward(labels, outputs):
     #                                 rouge_types=["rouge2"])["rouge2"].mid
     #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
     rouge_output = rouge.compute(predictions=outputs, references=labels,
-                                    rouge_types=["rouge2"])["rouge2"].mid
+                                 rouge_types=["rouge2"])["rouge2"].mid
     ppl_value = Value('d', 0.0)
     p = Process(target=get_sentence_score, args=("我是猪", ppl_value))
     p.start()
@@ -83,15 +83,52 @@ def compute_hybrid_reward(labels, outputs):
     return round(rouge_output.fmeasure, 4) * ppl
 
 prev_reward = 0
-i = 0
+
+
+class CustomizeEncoderDecoder(EncoderDecoderModel):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        id=None,
+        **kwargs,
+    ):
+        return super().forward(input_ids=input_ids,
+                               attention_mask=attention_mask,
+                               decoder_input_ids=decoder_input_ids,
+                               decoder_attention_mask=decoder_attention_mask,
+                               encoder_outputs=encoder_outputs,
+                               past_key_values=past_key_values,  # TODO: (PVP) implement :obj:`use_cache`
+                               inputs_embeds=inputs_embeds,
+                               decoder_inputs_embeds=decoder_inputs_embeds,
+                               labels=labels,
+                               use_cache=use_cache,  # TODO: (PVP) implement :obj:`use_cache`
+                               output_attentions=output_attentions,
+                               output_hidden_states=output_hidden_states,
+                               return_dict=return_dict,
+                               **kwargs,)
+
+
 class CustomizeTrainer(Trainer):
     def compute_loss(self, model, inputs):
         """
-        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+        How the loss is computed by Trainer.
+        By default, all models return the loss in the first element.
         Subclass and override for custom behavior.
         """
         outputs = model(**inputs)
-        print("****outputs:", outputs[1].shape, outputs)
+        print("****outputs: loss {}, shape {}".format(outputs[0], outputs[1].shape))
         # Save past state if it exists
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
@@ -99,6 +136,7 @@ class CustomizeTrainer(Trainer):
         # Also return the max vocab index on (batch_size, num_tokens). This is
         # For use of decoding to Chinese words for this training step.
         return outputs[0], outputs[1].argmax(2)
+
     # Override training step
     def training_step(self, model: nn.Module,
                       inputs: Dict[str,
@@ -143,19 +181,17 @@ class CustomizeTrainer(Trainer):
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
 
-        print("*****inputs: ", inputs)
+        # print("*****inputs: ", inputs)
+        print("***input ids", inputs["id"])
         print("decode decoder input ids: ", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
         print("decode input ids: ", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
         print("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
         print("decode current iteration softmax: ", tokenizer.batch_decode(decode_ids, skip_special_tokens=True))
-        global i
-        if i >= 4:
-            x=1/0
-        else:
-            i+=1
-        # x=1/0
-        label_decoded = tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True)
-        curr_iter_decoded = tokenizer.batch_decode(decode_ids, skip_special_tokens=True)
+        # raise Exception("stop here")
+        label_decoded = tokenizer.batch_decode(inputs['labels'],
+                                               skip_special_tokens=True)
+        curr_iter_decoded = tokenizer.batch_decode(decode_ids,
+                                                   skip_special_tokens=True)
         reward = compute_hybrid_reward(label_decoded, curr_iter_decoded)
         LOG.info("got reward %s", reward)
         global prev_reward
@@ -188,9 +224,9 @@ def setup_dataset(train_data_files, val_data_files, tokenizer):
         # force summarization <= 128
         outputs = tokenizer(batch["summary"], padding="max_length",
                             truncation=True, max_length=32)
-
         batch["input_ids"] = inputs.input_ids
         batch["attention_mask"] = inputs.attention_mask
+        batch["id"] = batch["id"]
 
         batch["decoder_input_ids"] = outputs.input_ids
         batch["labels"] = outputs.input_ids.copy()
@@ -217,8 +253,13 @@ def setup_dataset(train_data_files, val_data_files, tokenizer):
                                "attention_mask",
                                "decoder_input_ids",
                                "decoder_attention_mask",
-                               "labels"],
+                               "labels",
+                               "id"],
     )
+    print("in training", train_dataset.shape)
+    print("in training", train_dataset.column_names)
+    print("in training", train_dataset.features.keys())
+    print("in training", train_dataset[0]['id'])
     # same for validation dataset
     val_dataset = val_dataset.map(
         map_to_encoder_decoder_inputs,
@@ -231,7 +272,8 @@ def setup_dataset(train_data_files, val_data_files, tokenizer):
                                "attention_mask",
                                "decoder_input_ids",
                                "decoder_attention_mask",
-                               "labels"],
+                               "labels",
+                               "id"],
     )
     return train_dataset, val_dataset
 
@@ -246,8 +288,8 @@ def load_tokenizer(model_name):
 
 
 def setup_model(model_name, tokenizer):
-    model = EncoderDecoderModel.from_encoder_decoder_pretrained(model_name,
-                                                                model_name)
+    model = CustomizeEncoderDecoder.from_encoder_decoder_pretrained(model_name,
+                                                                    model_name)
 
     # Freeze all layers in encoder
     for param in model.encoder.base_model.parameters():
@@ -266,7 +308,6 @@ def setup_model(model_name, tokenizer):
     model.num_beams = 4
     return model
 
-
 def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
@@ -275,7 +316,7 @@ def run(args, lcsts):
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, tokenizer)
-    
+
     # set training arguments - these params are not really tuned,
     # feel free to change
     training_args = TrainingArguments(
@@ -363,4 +404,3 @@ if __name__ == '__main__':
             run(args, lcsts)
     else:
         run(args, lcsts)
-

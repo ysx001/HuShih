@@ -124,7 +124,7 @@ class LCSTS(object):
                             the summary file path
                             the merged (text + summary) file path
         """
-        parser = ET.XMLParser(encoding='utf-8')
+        parser = ET.XMLParser(encoding='utf-8', recover=True)
         # create element tree object
         tree = ET.parse(xml_file_path, parser=parser)
         # get root element

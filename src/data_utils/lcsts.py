@@ -7,6 +7,7 @@ import csv
 import re
 import os
 import argparse
+import logging
 from collections import defaultdict
 from xml.sax.saxutils import escape
 import xml.etree.ElementTree as ET
@@ -14,6 +15,12 @@ from bs4 import BeautifulSoup
 import numpy as np
 from data_utils.utils import split_unicode_chrs
 from data_utils.constants import FilePathTypes, UsageTypes
+
+# logging settings
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
+
 # TODO: define an abstract class for datasets
 class LCSTS(object):
     """
@@ -81,6 +88,7 @@ class LCSTS(object):
         base_name = os.path.splitext(os.path.basename(txt_file_path))[0]
         xml_file_path = os.path.join(output_path, base_name + '.xml')
         if os.path.exists(xml_file_path):
+            LOG.info("File already exist %s", xml_file_path)
             return xml_file_path
         # Read in the file
         with open(txt_file_path, 'r', encoding="utf-8") as f:
@@ -103,6 +111,7 @@ class LCSTS(object):
             f.write("<?xml version=\"1.0\"?>\n<data>\n")
             f.writelines(filedata)
             f.write("\n</data>")
+        LOG.info("Wrote sanitized xml file to %s", xml_file_path)
         return xml_file_path
 
     def _parse_xml_to_csv(self, xml_file_path, output_path, usage="train"):
@@ -136,12 +145,19 @@ class LCSTS(object):
         Returns:
             dict:  a dict of processed file path
         """
+        merged_file_path = os.path.join(output_path, usage + '_merged.csv')
+        file_path_dict = defaultdict(str)
+        if os.path.exists(merged_file_path):
+            file_path_dict[FilePathTypes.MERGED_FILE_PATH.value] = merged_file_path
+            LOG.info("File already exist %s", merged_file_path)
+            return file_path_dict
         with open(xml_file_path, "r") as f:
             # Read each line in the file, readlines() returns a list of lines
             content = f.readlines()
             # Combine the lines in the list into a string
             content = "".join(content)
             soup = BeautifulSoup(content, 'lxml-xml')
+        LOG.info("Parsing xml file %s", xml_file_path)
         merged = []
         docs = soup.find_all('doc')
         for doc in docs:
@@ -153,13 +169,12 @@ class LCSTS(object):
             merged_dict['short_text'] = doc.short_text.get_text().strip()
             merged.append(merged_dict)
         merged_keys = merged[0].keys()
-        merged_file_path = os.path.join(output_path, usage + '_merged.csv')
         with open(merged_file_path, 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, merged_keys)
             dict_writer.writeheader()
             dict_writer.writerows(merged)
-        file_path_dict = defaultdict(str)
         file_path_dict[FilePathTypes.MERGED_FILE_PATH.value] = merged_file_path
+        LOG.info("Wrote parsed csv file to %s", file_path_dict)
         return file_path_dict
 
     def _parse_xml_to_csv_old(self, xml_file_path, output_path, usage="train"):
@@ -228,7 +243,7 @@ class LCSTS(object):
         # save the short text files
         text_keys = text[0].keys()
         text_file_path = os.path.join(output_path, usage + '_text.csv')
-        with open(text_file_path, 'w', newline='')  as output_file:
+        with open(text_file_path, 'w', newline='') as output_file:
             dict_writer = csv.DictWriter(output_file, text_keys)
             dict_writer.writeheader()
             dict_writer.writerows(text)

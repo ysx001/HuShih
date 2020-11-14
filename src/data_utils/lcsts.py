@@ -7,7 +7,10 @@ import csv
 import re
 import os
 import argparse
+from collections import defaultdict
+from xml.sax.saxutils import escape
 import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
 import numpy as np
 from data_utils.utils import split_unicode_chrs
 from data_utils.constants import FilePathTypes, UsageTypes
@@ -81,17 +84,85 @@ class LCSTS(object):
             return xml_file_path
         # Read in the file
         with open(txt_file_path, 'r', encoding="utf-8") as f:
-            filedata = f.read()
-        # Replace <doc id=1> to <doc id="1"> to complie with xml format
-        fixed = re.sub(r'<doc id=([0-9]+)>', r'<doc id="\1">', filedata)
+            lines = f.readlines()
+        # process the file to fix illegal xml
+        tags = ['<summary>', '<short_text>']
+        filedata = []
+        for i in range(len(lines)):
+            if i != 0 and any(tag in lines[i-1] for tag in tags):
+                # fix escape characters in content
+                filedata.append(escape(lines[i]))
+            elif 'doc' in lines[i]:
+                # Replace <doc id=1> to <doc id="1"> to complie with xml format
+                fixed = re.sub(r'<doc id=([0-9]+)>', r'<doc id="\1">', lines[i])
+                filedata.append(fixed)
+            else:
+                filedata.append(lines[i])
         # Write the file out again
         with open(xml_file_path, 'w') as f:
             f.write("<?xml version=\"1.0\"?>\n<data>\n")
-            f.write(fixed)
+            f.writelines(filedata)
             f.write("\n</data>")
         return xml_file_path
 
     def _parse_xml_to_csv(self, xml_file_path, output_path, usage="train"):
+        """
+            The xml comes in with 2 formats.
+            For PART_I (Training), the data is
+                <doc id=x>
+                    <summary>
+                        ...
+                    </summary>
+                    <short_text>
+                        ...
+                    </short_text>
+                </doc>
+            For PART_II and PART_III (Val and Test), the data is
+                <doc id=0>
+                    <human_label>5</human_label>
+                    <summary>
+                        ...
+                    </summary>
+                    <short_text>
+                        ...
+                    </short_text>
+                </doc>
+        Args:
+            xml_file_path (str): The input of the xml file.
+            output_path (str): The directory to save the output files.
+            usage (str, optional): The usage of the data e.g. train, eval, test.
+                                   Defaults to "training".
+
+        Returns:
+            dict:  a dict of processed file path
+        """
+        with open(xml_file_path, "r") as f:
+            # Read each line in the file, readlines() returns a list of lines
+            content = f.readlines()
+            # Combine the lines in the list into a string
+            content = "".join(content)
+            soup = BeautifulSoup(content, 'lxml-xml')
+        merged = []
+        docs = soup.find_all('doc')
+        for doc in docs:
+            merged_dict = {}
+            merged_dict['id'] = int(doc.get('id'))
+            if usage != UsageTypes.TRAIN.value:
+                merged_dict['human_label'] = doc.human_label.get_text().strip()
+            merged_dict['summary'] = doc.summary.get_text().strip()
+            merged_dict['short_text'] = doc.short_text.get_text().strip()
+            merged.append(merged_dict)
+        merged_keys = merged[0].keys()
+        merged_file_path = os.path.join(output_path, usage + '_merged.csv')
+        with open(merged_file_path, 'w', newline='') as output_file:
+            dict_writer = csv.DictWriter(output_file, merged_keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(merged)
+        file_path_dict = defaultdict(str)
+        file_path_dict[FilePathTypes.MERGED_FILE_PATH.value] = merged_file_path
+        return file_path_dict
+
+    def _parse_xml_to_csv_old(self, xml_file_path, output_path, usage="train"):
         """
             The xml comes in with 2 formats.
             For PART_I (Training), the data is
@@ -175,7 +246,7 @@ class LCSTS(object):
             dict_writer = csv.DictWriter(output_file, merged_keys)
             dict_writer.writeheader()
             dict_writer.writerows(merged)
-        file_path_dict = dict()
+        file_path_dict = defaultdict(str)
         file_path_dict[FilePathTypes.TEXT_FILE_PATH.value] = text_file_path
         file_path_dict[FilePathTypes.SUMMARY_FILE_PATH.value] = summmary_file_path
         file_path_dict[FilePathTypes.MERGED_FILE_PATH.value] = merged_file_path
@@ -220,22 +291,3 @@ class LCSTS(object):
             dict_writer.writeheader()
             dict_writer.writerows(new_data)
         return rand_perm_file_path
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--training_path',
-                        help='Where is the training data (PART_I.txt) located?',
-                        type=str,
-                        default="../../data/LCSTS2.0/DATA/PART_I.txt")
-    parser.add_argument('--val_path',
-                        help='Where is the validation data (PART_II.txt) located?',
-                        type=str,
-                        default="../../data/LCSTS2.0/DATA/PART_II.txt")
-    parser.add_argument('--test_path',
-                        help='Where is the validation data (PART_III.txt) located?',
-                        type=str,
-                        default="../../data/LCSTS2.0/DATA/PART_III.txt")
-    args = parser.parse_args()
-    lcsts = LCSTS(args.training_path, args.val_path, args.test_path, output_path="./")
-    # parse the test data and store to csv
-    print("Test files saved to path {}".format(lcsts.test_csv))

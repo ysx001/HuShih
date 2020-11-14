@@ -43,3 +43,5 @@ python training.py
 ```
 
 By running `training.py`, you can train the `BERE2BERT` summarization model using pretrained chinese summarization.
+
+NOTE: when you first run `training.py`, it takes anywhere between `10-20` minutes to preprocess the data.

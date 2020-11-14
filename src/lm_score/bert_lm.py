@@ -485,7 +485,7 @@ def parse_result(result, all_tokens, output_file=None):
     if output_file is not None:
       tf.logging.info("Saving results to %s" % output_file)
       writer.write(json.dumps(sentences, indent=2, ensure_ascii=False))
-    return sentence
+    return sentences
 
 def get_sentence_score(sentence, ppl, output_dir="log"):
   """
@@ -584,9 +584,9 @@ def get_sentences_scores(sentences, ppl, max_token_size=128, output_dir="log"):
   tf.io.gfile.makedirs(output_dir)
   output_predict_file = os.path.join(output_dir, "{}-lm-score.json".format(time.time()))
   results = parse_result(result, all_tokens, output_predict_file)
+  print("[bert_lm] forcing parsed_result", results)
   for i in range(len(results)):
     ppl[i] = results[i]['ppl']
-  print(ppl)
   return results
 
 # print(get_sentence_score("我是猪"))

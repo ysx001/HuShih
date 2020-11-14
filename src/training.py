@@ -98,6 +98,7 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
     p = Process(target=get_sentences_scores, args=(curr_iter_decoded, ppl_values))
     p.start()
     p.join()
+    print("ppl before normalize", ppl_values[:])
     ppl = np.asarray(ppl_values[:])
     # normalize ppl score
     ppl = 2 * np.tanh(-ppl)

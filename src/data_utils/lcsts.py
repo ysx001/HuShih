@@ -34,11 +34,11 @@ class LCSTS(object):
         self._output_path = output_path
 
     @property
-    def training_merged_csv(self):
+    def train_merged_csv(self):
         if self._output_file_paths[UsageTypes.TRAIN.value] is None:
             self.process_csv(usage=UsageTypes.TRAIN.value)
         return self._output_file_paths[UsageTypes.TRAIN.value][FilePathTypes.MERGED_FILE_PATH.value]
-    
+
     @property
     def val_merged_csv(self):
         if self._output_file_paths[UsageTypes.VALIDATION.value] is None:

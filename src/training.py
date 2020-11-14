@@ -330,8 +330,8 @@ def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
 def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
-    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
-                                               val_data_files=lcsts.test_merged_csv,
+    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.train_merged_csv,
+                                               val_data_files=lcsts.validation_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)
@@ -403,6 +403,8 @@ if __name__ == '__main__':
     lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
                   output_path=args.preprocess_output_path)
 
+    LOG.info("Train files saved to path {}".format(lcsts.train_merged_csv))
+    LOG.info("Validation files saved to path {}".format(lcsts.val_merged_csv))
     LOG.info("Test files saved to path {}".format(lcsts.test_merged_csv))
     tokenizer = load_tokenizer(args.model_name)
     # load rouge for validation

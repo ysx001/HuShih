@@ -93,7 +93,7 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
             rouge_scores[c] += score.fmeasure
             c += 1
     rouge_scores = np.asarray(rouge_scores) / 3
-    print(rouge_scores)
+    print("rouge score", rouge_scores)
     ppl_values = Array('d', [0.0] * len(rouge_scores))
     p = Process(target=get_sentences_scores, args=(curr_iter_decoded, ppl_values))
     p.start()
@@ -101,7 +101,7 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
     ppl = np.asarray(ppl_values[:])
     # normalize ppl score
     ppl = 2 * np.tanh(-ppl)
-    print(ppl)
+    print("ppl after normalize", ppl)
     return rouge_scores + ppl
 
 
@@ -277,10 +277,6 @@ def setup_dataset(train_data_files, val_data_files, tokenizer):
                                "labels",
                                "id"],
     )
-    print("in training", train_dataset.shape)
-    print("in training", train_dataset.column_names)
-    print("in training", train_dataset.features.keys())
-    print("in training", train_dataset[0]['id'])
     # same for validation dataset
     val_dataset = val_dataset.map(
         map_to_encoder_decoder_inputs,

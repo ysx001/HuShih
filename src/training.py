@@ -331,7 +331,7 @@ def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
     train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.train_merged_csv,
-                                               val_data_files=lcsts.validation_merged_csv,
+                                               val_data_files=lcsts.val_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)

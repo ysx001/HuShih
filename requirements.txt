@@ -14,3 +14,4 @@ rouge-score==0.0.4
 beautifulsoup4==4.9.3
 lxml==4.6.1
 gdown==3.12.2
+zmq==0.0.0

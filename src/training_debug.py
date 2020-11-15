@@ -1,4 +1,5 @@
 # %%
+import tensorflow
 import nlp
 import imp
 print("nlp module", imp.find_module("nlp"))
@@ -17,8 +18,8 @@ from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
                           TrainingArguments)
 from lm_score.bert_lm import get_sentences_scores
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-torch.backends.cudnn.enabled = False
+#os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+#torch.backends.cudnn.enabled = False
 
 # Get the root level dir
 root = os.path.dirname(os.getcwd())
@@ -66,7 +67,7 @@ def compute_metrics(pred):
     }
 
 
-def compute_hybrid_rewards(inputs_labels, decode_ids):
+def compute_hybrid_rewards(inputs_labels, decode_ids, loss):
     """TODO: input real sentence here.
 
     Args:
@@ -83,6 +84,7 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
     #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
     # label_decoded = tokenizer.batch_decode(inputs['labels'],
     #                                        skip_special_tokens=True)
+    print("loss in 0:", loss)
     curr_iter_decoded = tokenizer.batch_decode(decode_ids,
                                                skip_special_tokens=True)
     pred = [" ".join(map(str, decode_id)) for decode_id in decode_ids.tolist()]
@@ -98,53 +100,56 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
             c += 1
     rouge_scores = np.asarray(rouge_scores) / 3
     print("rouge score", rouge_scores)
+    print("loss in 0.5 right before tensorflow process:", loss)
     ppl_values = Array('d', [0.0] * len(rouge_scores))
     p = Process(target=get_sentences_scores, args=(curr_iter_decoded, ppl_values))
     p.start()
     p.join()
+    print("loss in 0.75 right after tensorflow process::", loss)
     print("ppl before normalize", ppl_values[:])
     ppl = np.asarray(ppl_values[:])
     # normalize ppl score
     ppl = np.clip(ppl, 0, MAX_PPL)
     ppl = 2 * sigmoid(-ppl)
     print("ppl after normalize", ppl)
+    print("loss in 1:", loss)
     return rouge_scores + ppl
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
-class CustomizeEncoderDecoder(EncoderDecoderModel):
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        id=None,
-        **kwargs,
-    ):
-        return super().forward(input_ids=input_ids,
-                               attention_mask=attention_mask,
-                               decoder_input_ids=decoder_input_ids,
-                               decoder_attention_mask=decoder_attention_mask,
-                               encoder_outputs=encoder_outputs,
-                               past_key_values=past_key_values,  # TODO: (PVP) implement :obj:`use_cache`
-                               inputs_embeds=inputs_embeds,
-                               decoder_inputs_embeds=decoder_inputs_embeds,
-                               labels=labels,
-                               use_cache=use_cache,  # TODO: (PVP) implement :obj:`use_cache`
-                               output_attentions=output_attentions,
-                               output_hidden_states=output_hidden_states,
-                               return_dict=return_dict,
-                               **kwargs,)
+#class CustomizeEncoderDecoder(EncoderDecoderModel):
+ #   def forward(
+ #       self,
+ #       input_ids=None,
+ #       attention_mask=None,
+ #       decoder_input_ids=None,
+ #       decoder_attention_mask=None,
+ #       encoder_outputs=None,
+ #       past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
+ #       inputs_embeds=None,
+ #       decoder_inputs_embeds=None,
+ #       labels=None,
+ #       use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
+ #       output_attentions=None,
+ #       output_hidden_states=None,
+ #       return_dict=None,
+ #       id=None,
+ #       **kwargs,
+ #   ):
+ #       return super().forward(input_ids=input_ids,
+ #                              attention_mask=attention_mask,
+ #                              decoder_input_ids=decoder_input_ids,
+ #                              decoder_attention_mask=decoder_attention_mask,
+ #                              encoder_outputs=encoder_outputs,
+ #                              past_key_values=past_key_values,  # TODO: (PVP) implement :obj:`use_cache`
+ #                              inputs_embeds=inputs_embeds,
+ #                              decoder_inputs_embeds=decoder_inputs_embeds,
+ #                              labels=labels,
+ #                              use_cache=use_cache,  # TODO: (PVP) implement :obj:`use_cache`
+ #                              output_attentions=output_attentions,
+ #                              output_hidden_states=output_hidden_states,
+ #                              return_dict=return_dict,
+ #                              **kwargs,)
 
 class CustomizeTrainer(Trainer):
     def compute_loss(self, model, inputs):
@@ -199,28 +204,34 @@ class CustomizeTrainer(Trainer):
                 loss, decode_ids = self.compute_loss(model, inputs)
         else:
             loss, decode_ids = self.compute_loss(model, inputs)
+        print("loss right after compute_loss:", loss)
 
         # mean() to average on multi-gpu parallel training
         if self.args.n_gpu > 1:
             loss = loss.mean()
+        print("loss right after compute_loss mean:", loss)
 
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
-
+        print("loss right after compute_loss accumlate:", loss)
         # print("*****inputs: ", inputs)
-        print("***input ids", inputs["id"])
+#        print("***input ids", inputs["id"])
         print("decode decoder input ids: ", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
         print("decode input ids: ", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
         print("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
         print("decode current iteration softmax: ", tokenizer.batch_decode(decode_ids, skip_special_tokens=True))
         # raise Exception("stop here")
+        print("loss before multiply -1:", loss)
 
-        rewards = compute_hybrid_rewards(inputs['labels'], decode_ids)
+        rewards = compute_hybrid_rewards(inputs['labels'], decode_ids, loss)
         LOG.info("got reward %s", rewards)
+        print("loss before multiply 0:", loss)
         # compute current aggregated reward
-        current_ids = inputs['id'].tolist()
+        current_ids = np.arange(16).tolist()
         prev_reward = sum([REWARD_MAP[idx] for idx in current_ids])
         curr_reward = sum(rewards)
+        print("prev_reward:", prev_reward, "curr_reward:", curr_reward)
+        print("loss before multiply:", loss)
         loss *= (curr_reward - prev_reward)
         # store current iterations's reward in to cache
         for i in range(len(rewards)):
@@ -232,6 +243,7 @@ class CustomizeTrainer(Trainer):
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
+            print("loss: ", loss)
             loss.backward()
 
         return loss.detach()
@@ -312,7 +324,7 @@ def load_tokenizer(model_name):
 
 
 def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
-    model = CustomizeEncoderDecoder.from_encoder_decoder_pretrained(model_name,
+    model = EncoderDecoderModel.from_encoder_decoder_pretrained(model_name,
                                                                     model_name)
 
     # Freeze all layers in encoder

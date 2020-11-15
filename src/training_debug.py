@@ -1,6 +1,7 @@
 # %%
-import tensorflow
 import nlp
+import zmq
+import pickle
 import imp
 print("nlp module", imp.find_module("nlp"))
 import os
@@ -39,6 +40,9 @@ DEFAULT_TEST_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
 DEFAULT_OUTPUT_PATH = os.path.join(root, 'data')
 REWARD_MAP = defaultdict(float)
 
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+socket.connect('tcp://127.0.0.1:5555')
 
 # Freeze embedding layers, and first N layers of decoder
 def freeze_decoder_weight(model, num_layers):
@@ -101,10 +105,20 @@ def compute_hybrid_rewards(inputs_labels, decode_ids, loss):
     rouge_scores = np.asarray(rouge_scores) / 3
     print("rouge score", rouge_scores)
     print("loss in 0.5 right before tensorflow process:", loss)
-    ppl_values = Array('d', [0.0] * len(rouge_scores))
-    p = Process(target=get_sentences_scores, args=(curr_iter_decoded, ppl_values))
-    p.start()
-    p.join()
+    ppl_values = [0.0] * len(rouge_scores)
+
+    to_be_sent_msg = {
+        'ppl_values': ppl_values,
+        'curr_iter_decoded': curr_iter_decoded
+    }
+    socket.send(pickle.dumps(to_be_sent_msg))
+    print("sent serialized dict")
+    serialized_ppl_values = socket.recv()
+    ppl_values = pickle.loads(serialized_ppl_values)
+
+    # p = Process(target=get_sentences_scores, args=(curr_iter_decoded, ppl_values))
+    # p.start()
+    # p.join()
     print("loss in 0.75 right after tensorflow process::", loss)
     print("ppl before normalize", ppl_values[:])
     ppl = np.asarray(ppl_values[:])
@@ -117,39 +131,39 @@ def compute_hybrid_rewards(inputs_labels, decode_ids, loss):
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
-#class CustomizeEncoderDecoder(EncoderDecoderModel):
- #   def forward(
- #       self,
- #       input_ids=None,
- #       attention_mask=None,
- #       decoder_input_ids=None,
- #       decoder_attention_mask=None,
- #       encoder_outputs=None,
- #       past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
- #       inputs_embeds=None,
- #       decoder_inputs_embeds=None,
- #       labels=None,
- #       use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
- #       output_attentions=None,
- #       output_hidden_states=None,
- #       return_dict=None,
- #       id=None,
- #       **kwargs,
- #   ):
- #       return super().forward(input_ids=input_ids,
- #                              attention_mask=attention_mask,
- #                              decoder_input_ids=decoder_input_ids,
- #                              decoder_attention_mask=decoder_attention_mask,
- #                              encoder_outputs=encoder_outputs,
- #                              past_key_values=past_key_values,  # TODO: (PVP) implement :obj:`use_cache`
- #                              inputs_embeds=inputs_embeds,
- #                              decoder_inputs_embeds=decoder_inputs_embeds,
- #                              labels=labels,
- #                              use_cache=use_cache,  # TODO: (PVP) implement :obj:`use_cache`
- #                              output_attentions=output_attentions,
- #                              output_hidden_states=output_hidden_states,
- #                              return_dict=return_dict,
- #                              **kwargs,)
+class CustomizeEncoderDecoder(EncoderDecoderModel):
+   def forward(
+       self,
+       input_ids=None,
+       attention_mask=None,
+       decoder_input_ids=None,
+       decoder_attention_mask=None,
+       encoder_outputs=None,
+       past_key_values=None,  # TODO: (PVP) implement :obj:`use_cache`
+       inputs_embeds=None,
+       decoder_inputs_embeds=None,
+       labels=None,
+       use_cache=None,  # TODO: (PVP) implement :obj:`use_cache`
+       output_attentions=None,
+       output_hidden_states=None,
+       return_dict=None,
+       id=None,
+       **kwargs,
+   ):
+       return super().forward(input_ids=input_ids,
+                              attention_mask=attention_mask,
+                              decoder_input_ids=decoder_input_ids,
+                              decoder_attention_mask=decoder_attention_mask,
+                              encoder_outputs=encoder_outputs,
+                              past_key_values=past_key_values,  # TODO: (PVP) implement :obj:`use_cache`
+                              inputs_embeds=inputs_embeds,
+                              decoder_inputs_embeds=decoder_inputs_embeds,
+                              labels=labels,
+                              use_cache=use_cache,  # TODO: (PVP) implement :obj:`use_cache`
+                              output_attentions=output_attentions,
+                              output_hidden_states=output_hidden_states,
+                              return_dict=return_dict,
+                              **kwargs,)
 
 class CustomizeTrainer(Trainer):
     def compute_loss(self, model, inputs):
@@ -227,7 +241,7 @@ class CustomizeTrainer(Trainer):
         LOG.info("got reward %s", rewards)
         print("loss before multiply 0:", loss)
         # compute current aggregated reward
-        current_ids = np.arange(16).tolist()
+        current_ids = inputs['id'].tolist()
         prev_reward = sum([REWARD_MAP[idx] for idx in current_ids])
         curr_reward = sum(rewards)
         print("prev_reward:", prev_reward, "curr_reward:", curr_reward)
@@ -324,7 +338,7 @@ def load_tokenizer(model_name):
 
 
 def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
-    model = EncoderDecoderModel.from_encoder_decoder_pretrained(model_name,
+    model = CustomizeEncoderDecoder.from_encoder_decoder_pretrained(model_name,
                                                                     model_name)
 
     # Freeze all layers in encoder

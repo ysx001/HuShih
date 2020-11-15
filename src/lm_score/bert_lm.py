@@ -489,9 +489,9 @@ def parse_result(result, all_tokens, output_file=None):
 
 def get_sentence_score(sentence, ppl, output_dir="log"):
   """
-  Given a sentence, output the approximated perplexity score 
+  Given a sentence, output the approximated perplexity score
   generated using BERT.
-  During the process, store the perplexity scores in local disk for 
+  During the process, store the perplexity scores in local disk for
   future reference.
 
   Args:
@@ -539,9 +539,9 @@ def get_sentence_score(sentence, ppl, output_dir="log"):
 
 def get_sentences_scores(sentences, ppl, max_token_size=128, output_dir="log"):
   """
-  Given a sentence, output the approximated perplexity score 
+  Given a sentence, output the approximated perplexity score
   generated using BERT.
-  During the process, store the perplexity scores in local disk for 
+  During the process, store the perplexity scores in local disk for
   future reference.
 
   Args:
@@ -587,6 +587,6 @@ def get_sentences_scores(sentences, ppl, max_token_size=128, output_dir="log"):
   print("[bert_lm] forcing parsed_result", results)
   for i in range(len(results)):
     ppl[i] = results[i]['ppl']
-  return results
+  return ppl
 
 # print(get_sentence_score("我是猪"))

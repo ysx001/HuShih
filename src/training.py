@@ -27,6 +27,7 @@ LOG.setLevel(logging.INFO)
 # LOG.addHandler(handler)
 logging.basicConfig(level=logging.INFO)
 # constants
+MAX_PPL = 500
 DEFAULT_MODEL_NAME = 'hfl/chinese-roberta-wwm-ext'
 DEFAULT_TRAINING_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
 DEFAULT_VAL_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
@@ -101,6 +102,8 @@ def compute_hybrid_rewards(inputs_labels, decode_ids):
     print("ppl before normalize", ppl_values[:])
     ppl = np.asarray(ppl_values[:])
     # normalize ppl score
+    if ppl > MAX_PPL:
+        ppl = MAX_PPL
     ppl = 2 * sigmoid(-ppl)
     print("ppl after normalize", ppl)
     return rouge_scores + ppl

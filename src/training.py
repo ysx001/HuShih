@@ -21,6 +21,7 @@ from lm_score.bert_lm import get_sentences_scores
 
 #os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 #torch.backends.cudnn.enabled = False
+torch.cuda.set_device(1)
 
 # Get the root level dir
 root = os.path.dirname(os.getcwd())
@@ -434,21 +435,20 @@ if __name__ == '__main__':
 
     # Load tokenizer
     if torch.cuda.device_count() > 0:
-        import sys
-        print('__Python VERSION:', sys.version)
-        print('__pyTorch VERSION:', torch.__version__)
-        print('__CUDA VERSION')
-        from subprocess import call
-        # call(["nvcc", "--version"]) does not work
-        print('__CUDNN VERSION:', torch.backends.cudnn.version())
-        print('__Number CUDA Devices:', torch.cuda.device_count())
-        print('__Devices')
-        call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
-        print('Active CUDA Device: GPU', torch.cuda.current_device())
-
-        print('Available devices ', torch.cuda.device_count())
-        print('Current cuda device ', torch.cuda.current_device())
         with torch.cuda.device(0):
+            import sys
+            print('__Python VERSION:', sys.version)
+            print('__pyTorch VERSION:', torch.__version__)
+            print('__CUDA VERSION')
+            from subprocess import call
+            # call(["nvcc", "--version"]) does not work
+            print('__CUDNN VERSION:', torch.backends.cudnn.version())
+            print('__Number CUDA Devices:', torch.cuda.device_count())
+            print('__Devices')
+            call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
+            print('Active CUDA Device: GPU', torch.cuda.current_device())
+            print('Available devices ', torch.cuda.device_count())
+            print('Current cuda device ', torch.cuda.current_device())
             run(args, lcsts)
     else:
         run(args, lcsts)

@@ -21,7 +21,7 @@ from lm_score.bert_lm import get_sentences_scores
 
 #os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 #torch.backends.cudnn.enabled = False
-os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3'
 
 # Get the root level dir
 root = os.path.dirname(os.getcwd())
@@ -353,8 +353,8 @@ def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
 def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
-    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
-                                               val_data_files=lcsts.test_merged_csv,
+    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.train_merged_csv,
+                                               val_data_files=lcsts.val_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)

@@ -16,27 +16,33 @@ pip install -r requirements.txt
 
 Note, the google drive link is provided here for convenience of the project. And the link will be disabled once the CS229 Autumn 2020 class concludes. If you wish to use `gdown` to download models from google drive, please go to the appropriate sources, get the permission to download, and manage the files on your own.
 
-Download `chinese_wwm_ext_L-12_H-768_A-12` tensorflow ckpts from [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm). 
+Download `chinese_wwm_ext_L-12_H-768_A-12` tensorflow ckpts from [Chinese-BERT-wwm](https://github.com/ymcui/Chinese-BERT-wwm).
 
 ```
 cd ~/HuShih
-sudo mkdir model; cd model
+mkdir model; cd model
+mkdir chinese_wwm_ext_L-12_H-768_A-12; cd chinese_wwm_ext_L-12_H-768_A-12
 gdown https://drive.google.com/uc?id=1Lf3uofzLyshD__2t9tFlN7Mh7G1j6z9U
-sudo mkdir chinese_wwm_ext_L-12_H-768_A-12; cd chinese_wwm_ext_L-12_H-768_A-12
 unzip chinese_wwm_ext_L-12_H-768_A-12.zip
 ```
 
 Download `LCSTS2.0` data from [LCSTS](http://icrc.hitsz.edu.cn/Article/show/139.html). (Please go through the application process to download the data.)
 ```
 cd ~/HuShih
-sudo mkdir data; cd data
+mkdir data; cd data
 gdown https://drive.google.com/uc?id=1swFnIc0fI4aAtl2JcW-BvzNnKKIowt_I
-sudo mkdir LCSTS2.0; cd LCSTS2.0
 unzip LCSTS2.0.zip
 ```
 
 ### Start Training
 
+Bring up server to compute BERT LM score using tensorflow
+```
+cd ~/HuShih/src
+python lm_score/bert_lm_server.py
+```
+
+Bring up client to train DecoderEncoderModel using pytorch
 ```
 cd ~/HuShih/src
 python training.py

@@ -21,7 +21,7 @@ from lm_score.bert_lm import get_sentences_scores
 
 #os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 #torch.backends.cudnn.enabled = False
-torch.cuda.set_device(1)
+os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3'
 
 # Get the root level dir
 root = os.path.dirname(os.getcwd())

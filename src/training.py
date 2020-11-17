@@ -56,15 +56,17 @@ def freeze_decoder_weight(model, num_layers):
 
 def compute_metrics(pred):
     labels_ids = pred.label_ids
-    pred_ids = pred.predictions
+    pred_ids = pred.predictions[0].argmax(2)
 
+    # print("****labels_ids, pred_ids:", labels_ids, pred_ids)
+    # print("**shape", len(pred_ids), pred_ids[0].shape, pred_ids[1].shape, pred_ids[2].shape)
     # all unnecessary tokens are removed
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-
+    # print("*** strings:", pred_str, label_str)
     rouge_output = rouge.compute(predictions=pred_str, references=label_str,
                                  rouge_types=["rouge2"])["rouge2"].mid
-
+    # print("*** rouge:", rouge_output)
     return {
         "rouge2_precision": round(rouge_output.precision, 4),
         "rouge2_recall": round(rouge_output.recall, 4),
@@ -371,7 +373,7 @@ def run(args, lcsts):
         do_eval=True,
         logging_steps=20,
         save_steps=20,
-        eval_steps=20,
+        eval_steps=40,
         overwrite_output_dir=True,
         warmup_steps=40,
         save_total_limit=10,
@@ -410,7 +412,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
                         type=int,
-                        default=256)
+                        default=128)
     parser.add_argument('--num_freeze_decoder_layers',
                         help='the number of decoder layers to freeze',
                         type=int,

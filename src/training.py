@@ -43,7 +43,7 @@ REWARD_MAP = defaultdict(float)
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-socket.connect('tcp://127.0.0.1:5555')
+socket.connect('tcp://13.68.135.179:5555')
 
 # Freeze embedding layers, and first N layers of decoder
 def freeze_decoder_weight(model, num_layers):
@@ -369,11 +369,11 @@ def run(args, lcsts):
         evaluate_during_training=True,
         do_train=True,
         do_eval=True,
-        logging_steps=1000,
-        save_steps=1000,
-        eval_steps=1000,
+        logging_steps=20,
+        save_steps=20,
+        eval_steps=20,
         overwrite_output_dir=True,
-        warmup_steps=2000,
+        warmup_steps=40,
         save_total_limit=10,
     )
 
@@ -410,7 +410,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
                         type=int,
-                        default=16)
+                        default=256)
     parser.add_argument('--num_freeze_decoder_layers',
                         help='the number of decoder layers to freeze',
                         type=int,

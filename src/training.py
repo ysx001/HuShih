@@ -2,25 +2,26 @@
 import nlp
 import zmq
 import pickle
-import imp
-print("nlp module", imp.find_module("nlp"))
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import os
-from tqdm.auto import tqdm
 import logging
 import argparse
-from collections import defaultdict
 from multiprocessing import Process, Array
 from typing import Dict, Union, Any
 import torch
 import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from torch.distributions import Categorical
+from tqdm.auto import tqdm
 import numpy as np
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
                           TrainingArguments, PredictionOutput, EvalPrediction)
 from lm_score.bert_lm import get_sentences_scores
+
+USE_RL = True
+HYBRID_REWARD = False
 
 #os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 #torch.backends.cudnn.enabled = False
@@ -42,7 +43,6 @@ DEFAULT_TRAINING_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_I.txt')
 DEFAULT_VAL_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_II.txt')
 DEFAULT_TEST_PATH = os.path.join(root, 'data/LCSTS2.0/DATA/PART_III.txt')
 DEFAULT_OUTPUT_PATH = os.path.join(root, 'data')
-REWARD_MAP = defaultdict(float)
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
@@ -79,32 +79,37 @@ def compute_metrics(pred):
         "rouge2_fmeasure": round(rouge_output.fmeasure, 4),
     }
 
-
-def compute_hybrid_rewards(inputs_labels, decode_ids, loss):
-    """TODO: input real sentence here.
-
-    Args:
-        labels ([type]): [description]
-        outputs ([type]): [description]
-
-    Returns:
-        [type]: [description]
-    """
-    # reward = 0
-    # for i in range(len(labels)):
-    #     rouge_output = rouge.compute(predictions=outputs[i], references=labels[i],
-    #                                 rouge_types=["rouge2"])["rouge2"].mid
-    #     reward += round(rouge_output.fmeasure, 4) * get_sentence_score(outputs)
-    # label_decoded = tokenizer.batch_decode(inputs['labels'],
-    #                                        skip_special_tokens=True)
-    print("loss in 0:", loss)
-    curr_iter_decoded = tokenizer.batch_decode(decode_ids,
+def sample_decode_curr_iter(decode_ids, num_batch, greedy=True):
+    sum_log_probs = []
+    if greedy:
+        # greedy sampling
+        curr_decode_ids = decode_ids.argmax(2)
+    else:
+        curr_decode_ids = []
+        for i in num_batch:
+            probs = decode_ids[i, :, :]
+            print("probs shape", probs.shape)
+            # perform multinomial sampling
+            multi_dist = Categorical(probs)
+            sampled_decode_ids = multi_dist.sample()
+            print("sampled_decode_ids", sampled_decode_ids)
+            curr_decode_ids.append()
+            sum_log_prob = torch.sum(multi_dist.log_prob(sampled_decode_ids))
+            print("sum_log_prob", sum_log_prob)
+            sum_log_probs.append(sum_log_prob)
+    curr_iter_decoded = tokenizer.batch_decode(curr_decode_ids,
                                                skip_special_tokens=True)
-    pred = [" ".join(map(str, decode_id)) for decode_id in decode_ids.tolist()]
-    ref = [" ".join(map(str, input_label)) for input_label in inputs_labels.tolist()]
+    LOG.info("decode current iteration softmax: ", curr_iter_decoded)
+    return curr_decode_ids, curr_iter_decoded, sum_log_probs
+
+
+def compute_rouge_score(inputs_labels, curr_decode_ids):
+    pred = [" ".join(map(str, d_id)) for d_id in curr_decode_ids.tolist()]
+    ref = [" ".join(map(str, i_label)) for i_label in inputs_labels.tolist()]
     rouge_outputs = rouge.compute(predictions=pred, references=ref,
                                   rouge_types=["rouge2", "rouge1", "rougeL"],
                                   use_agregator=False)
+    # compute averaged score of rouge2, rouge1, and rougeL
     rouge_scores = [0.0] * len(pred)
     for rouge_value in rouge_outputs.values():
         c = 0
@@ -113,24 +118,68 @@ def compute_hybrid_rewards(inputs_labels, decode_ids, loss):
             c += 1
     rouge_scores = np.asarray(rouge_scores) / 3
     print("rouge score", rouge_scores)
-    # ppl_values = [0.0] * len(rouge_scores)
-    #
-    # to_be_sent_msg = {
-    #     'ppl_values': ppl_values,
-    #     'curr_iter_decoded': curr_iter_decoded
-    # }
-    # socket.send(pickle.dumps(to_be_sent_msg))
-    # print("sent serialized dict")
-    # serialized_ppl_values = socket.recv()
-    # ppl_values = pickle.loads(serialized_ppl_values)
-
-    # # print("ppl before normalize", ppl_values[:])
-    # ppl = np.asarray(ppl_values[:])
-    # # normalize ppl score
-    # ppl = np.clip(ppl, 0, MAX_PPL)
-    # ppl = 2 * sigmoid(-ppl)
-    # print("ppl after normalize", ppl)
     return rouge_scores
+
+
+def compute_bert_ppl_score(inputs_labels, num_batch, curr_iter_decoded):
+    label_decoded = tokenizer.batch_decode(inputs_labels,
+                                           skip_special_tokens=True)
+    ppl_values = [0.0] * num_batch
+    
+    to_be_sent_msg = {
+        'ppl_values': ppl_values,
+        'curr_iter_decoded': curr_iter_decoded
+    }
+    socket.send(pickle.dumps(to_be_sent_msg))
+    print("sent serialized dict")
+    serialized_ppl_values = socket.recv()
+    ppl_values = pickle.loads(serialized_ppl_values)
+
+    # print("ppl before normalize", ppl_values[:])
+    ppl = np.asarray(ppl_values[:])
+    # normalize ppl score
+    ppl = np.clip(ppl, 0, MAX_PPL)
+    ppl = 2 * sigmoid(-ppl)
+    print("ppl after normalize", ppl)
+    return ppl
+
+
+def reward_function(inputs_labels, decode_ids, greedy=True, is_hybrid=False):
+    """Compute the reward associated with the current iteration.
+
+
+    Args:
+        inputs_labels (tensor): the ground truth label ids for
+                                the current iteration.
+        decode_ids (tensor): the prediction matrix of shape
+                             (num_batch, num_tokens, num_vocab)
+        greedy (bool, optional): If we want to do random sampling
+                                 or greedy argmax.
+                                 Defaults to True.
+        is_hybrid (bool, optional): Is the reward a hyrid of rouge
+                                    and bert perplexity score.
+                                    Defaults to False.
+
+    Returns:
+        np.array(num_batch), list(num_batch): the reward score
+            and the sum of sampling log probilities
+            (only available when greedy is False)
+    """
+    num_batch, num_tokens, num_vocab = decode_ids.shape
+    # perform sampling and decode the sentences
+    curr_decode_ids, curr_iter_decoded, sum_log_probs = \
+        sample_decode_curr_iter(decode_ids, num_batch, greedy=greedy)
+    # compute rouge score
+    rouge_score = compute_rouge_score(inputs_labels,
+                                      curr_decode_ids)
+    # compute bert language model based perplexity score
+    if is_hybrid:
+        ppl = compute_bert_ppl_score(inputs_labels,
+                                     num_batch,
+                                     curr_iter_decoded)
+    else:
+        ppl = np.zeros(num_batch)
+    return rouge_scores + ppl, sum_log_probs
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -184,7 +233,7 @@ class CustomizeTrainer(Trainer):
         # We don't use .loss here since the model may return tuples instead of ModelOutput.
         # Also return the max vocab index on (batch_size, num_tokens). This is
         # For use of decoding to Chinese words for this training step.
-        return outputs[0], outputs[1].argmax(2)
+        return outputs[0], outputs[1]
 
     def _prediction_loop(
         self, dataloader: DataLoader, description: str, prediction_loss_only: Optional[bool] = None
@@ -319,38 +368,52 @@ class CustomizeTrainer(Trainer):
 
         if self.args.fp16 and _use_native_amp:
             with autocast():
-                loss, decode_ids = self.compute_loss(model, inputs)
+                mle_loss, decode_ids = self.compute_loss(model, inputs)
         else:
-            loss, decode_ids = self.compute_loss(model, inputs)
+            mle_loss, decode_ids = self.compute_loss(model, inputs)
         # print("loss right after compute_loss:", loss)
 
         # mean() to average on multi-gpu parallel training
         if self.args.n_gpu > 1:
-            loss = loss.mean()
+            mle_loss = mle_loss.mean()
         # print("loss right after compute_loss mean:", loss)
 
         if self.args.gradient_accumulation_steps > 1:
-            loss = loss / self.args.gradient_accumulation_steps
+            mle_loss = mle_loss / self.args.gradient_accumulation_steps
         # print("loss right after compute_loss accumlate:", loss)
         # print("*****inputs: ", inputs)
-#        print("***input ids", inputs["id"])
-        print("decode decoder input ids: ", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
-        print("decode input ids: ", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
-        print("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
-        print("decode current iteration softmax: ", tokenizer.batch_decode(decode_ids, skip_special_tokens=True))
-        # raise Exception("stop here")
-
-        rewards = compute_hybrid_rewards(inputs['labels'], decode_ids, loss)
-        LOG.info("got reward %s", rewards)
+        # print("***input ids", inputs["id"])
+        LOG.info("decode decoder input ids: ", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
+        LOG.info("decode input ids: ", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
+        LOG.info("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
+        # compute rl loss
+        sample_reward, sample_log_probs = reward_function(
+                                                inputs['labels'],
+                                                decode_ids,
+                                                greedy=False,
+                                                is_hybrid=HYBRID_REWARD)
+        baseline_reward, _ = reward_function(
+                                        inputs['labels'],
+                                        decode_ids,
+                                        greedy=True,
+                                        is_hybrid=HYBRID_REWARD)
+        rl_loss = -(sample_reward - baseline_reward) * sample_log_probs
+        rl_loss = torch.mean(rl_loss)
+        
+        # LOG.info("got reward %s", rewards)
         # compute current aggregated reward
-        current_ids = inputs['id'].tolist()
-        prev_reward = sum([REWARD_MAP[idx] for idx in current_ids])
-        curr_reward = sum(rewards)
-        print("prev_reward:", prev_reward, "curr_reward:", curr_reward)
+        # current_ids = inputs['id'].tolist()
+        # prev_reward = sum([REWARD_MAP[idx] for idx in current_ids])
+        # curr_reward = sum(rewards)
+        # print("prev_reward:", prev_reward, "curr_reward:", curr_reward)
         # loss *= (curr_reward - prev_reward)
         # store current iterations's reward in to cache
-        for i in range(len(rewards)):
-            REWARD_MAP[current_ids[i]] = rewards[i]
+        # for i in range(len(rewards)):
+        #     REWARD_MAP[current_ids[i]] = rewards[i]
+        if USE_RL:
+            loss = (1 - RL_WEIGHT) * mle_loss + RL_WEIGHT * rl_loss
+        else:
+            loss = mle_loss
 
         if self.args.fp16 and _use_native_amp:
             self.scaler.scale(loss).backward()
@@ -358,7 +421,6 @@ class CustomizeTrainer(Trainer):
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            print("loss: ", loss)
             loss.backward()
 
         return loss.detach()
@@ -462,8 +524,8 @@ def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
 def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
-    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.train_merged_csv,
-                                               val_data_files=lcsts.val_merged_csv,
+    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
+                                               val_data_files=lcsts.test_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)
@@ -520,7 +582,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
                         type=int,
-                        default=64)
+                        default=4)
     parser.add_argument('--num_freeze_decoder_layers',
                         help='the number of decoder layers to freeze',
                         type=int,

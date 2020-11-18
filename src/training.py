@@ -17,14 +17,16 @@ import numpy as np
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
-                          TrainingArguments, PredictionOutput, EvalPrediction)
+                          TrainingArguments, EvalPrediction)
+from transformers.trainer_utils import PredictionOutput
 from lm_score.bert_lm import get_sentences_scores
 
 USE_RL = True
 HYBRID_REWARD = False
+RL_WEIGHT = 0.5
 
-#os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-#torch.backends.cudnn.enabled = False
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+# torch.backends.cudnn.enabled = False
 # os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3'
 
 # Get the root level dir
@@ -32,9 +34,6 @@ root = os.path.dirname(os.getcwd())
 # logging settings
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.INFO)
-# handler = logging.StreamHandler()
-# handler.setLevel(logging.INFO)
-# LOG.addHandler(handler)
 logging.basicConfig(level=logging.INFO)
 # constants
 MAX_PPL = 500
@@ -79,32 +78,34 @@ def compute_metrics(pred):
         "rouge2_fmeasure": round(rouge_output.fmeasure, 4),
     }
 
-def sample_decode_curr_iter(decode_ids, num_batch, greedy=True):
+def sample_decode_curr_iter(logits, num_batch, greedy=True):
     sum_log_probs = []
     if greedy:
         # greedy sampling
-        curr_decode_ids = decode_ids.argmax(2)
+        curr_decode_ids = logits.argmax(2)
     else:
         curr_decode_ids = []
-        for i in num_batch:
-            probs = decode_ids[i, :, :]
+        for i in range(num_batch):
+            softmax = nn.Softmax(dim=1)
+            probs = softmax(logits[i, :, :])
             print("probs shape", probs.shape)
             # perform multinomial sampling
             multi_dist = Categorical(probs)
             sampled_decode_ids = multi_dist.sample()
             print("sampled_decode_ids", sampled_decode_ids)
-            curr_decode_ids.append()
+            curr_decode_ids.append(sampled_decode_ids)
             sum_log_prob = torch.sum(multi_dist.log_prob(sampled_decode_ids))
             print("sum_log_prob", sum_log_prob)
             sum_log_probs.append(sum_log_prob)
     curr_iter_decoded = tokenizer.batch_decode(curr_decode_ids,
                                                skip_special_tokens=True)
-    LOG.info("decode current iteration softmax: ", curr_iter_decoded)
+    LOG.info("decode current iteration softmax: %s", curr_iter_decoded)
+    LOG.info("sum_log_probs: %s", sum_log_probs)
     return curr_decode_ids, curr_iter_decoded, sum_log_probs
 
 
 def compute_rouge_score(inputs_labels, curr_decode_ids):
-    pred = [" ".join(map(str, d_id)) for d_id in curr_decode_ids.tolist()]
+    pred = [" ".join(map(str, d_id)) for d_id in curr_decode_ids]
     ref = [" ".join(map(str, i_label)) for i_label in inputs_labels.tolist()]
     rouge_outputs = rouge.compute(predictions=pred, references=ref,
                                   rouge_types=["rouge2", "rouge1", "rougeL"],
@@ -170,8 +171,8 @@ def reward_function(inputs_labels, decode_ids, greedy=True, is_hybrid=False):
     curr_decode_ids, curr_iter_decoded, sum_log_probs = \
         sample_decode_curr_iter(decode_ids, num_batch, greedy=greedy)
     # compute rouge score
-    rouge_score = compute_rouge_score(inputs_labels,
-                                      curr_decode_ids)
+    rouge_scores = compute_rouge_score(inputs_labels,
+                                       curr_decode_ids)
     # compute bert language model based perplexity score
     if is_hybrid:
         ppl = compute_bert_ppl_score(inputs_labels,
@@ -383,9 +384,9 @@ class CustomizeTrainer(Trainer):
         # print("loss right after compute_loss accumlate:", loss)
         # print("*****inputs: ", inputs)
         # print("***input ids", inputs["id"])
-        LOG.info("decode decoder input ids: ", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
-        LOG.info("decode input ids: ", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
-        LOG.info("decode labels: ", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
+        LOG.info("decode decoder input ids: %s", tokenizer.batch_decode(inputs['decoder_input_ids'], skip_special_tokens=True))
+        LOG.info("decode input ids: %s", tokenizer.batch_decode(inputs['input_ids'], skip_special_tokens=True))
+        LOG.info("decode labels: %s", tokenizer.batch_decode(inputs['labels'], skip_special_tokens=True))
         # compute rl loss
         sample_reward, sample_log_probs = reward_function(
                                                 inputs['labels'],
@@ -397,8 +398,12 @@ class CustomizeTrainer(Trainer):
                                         decode_ids,
                                         greedy=True,
                                         is_hybrid=HYBRID_REWARD)
-        rl_loss = -(sample_reward - baseline_reward) * sample_log_probs
-        rl_loss = torch.mean(rl_loss)
+        mean_sample_reward = np.mean(sample_reward)
+        mean_baseline_reward = np.mean(baseline_reward)
+        mean_sample_log_probs = torch.mean(torch.stack(sample_log_probs))
+        rl_loss = - (mean_sample_reward - mean_baseline_reward) * mean_sample_log_probs
+        LOG.info("rl_loss: %s", rl_loss)
+        
         
         # LOG.info("got reward %s", rewards)
         # compute current aggregated reward

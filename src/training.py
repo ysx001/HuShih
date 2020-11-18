@@ -515,11 +515,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
                         type=int,
-<<<<<<< HEAD
                         default=4)
-=======
-                        default=128)
->>>>>>> 3950a12ebb981d229c2dcc08f04d64fa8af8b5da
     parser.add_argument('--num_freeze_decoder_layers',
                         help='the number of decoder layers to freeze',
                         type=int,

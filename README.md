@@ -31,7 +31,7 @@ Download `LCSTS2.0` data from [LCSTS](http://icrc.hitsz.edu.cn/Article/show/139.
 cd ~/HuShih
 mkdir data; cd data
 # download pre-processed training.csv to save time
-gdown https://drive.google.com/uc?id=1glFzfqIMCZf1yNu8PKx_pqP3GlUl1wTW
+gdown https://drive.google.com/uc?id=1QdWhAWtGcBytsiYCJz7k5DVs7WhjNiHs
 touch PART_I.xml
 gdown https://drive.google.com/uc?id=1swFnIc0fI4aAtl2JcW-BvzNnKKIowt_I
 unzip LCSTS2.0.zip

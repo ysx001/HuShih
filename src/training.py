@@ -5,6 +5,7 @@ import pickle
 import imp
 print("nlp module", imp.find_module("nlp"))
 import os
+from tqdm.auto import tqdm
 import logging
 import argparse
 from collections import defaultdict
@@ -18,7 +19,7 @@ import numpy as np
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
-                          TrainingArguments, PredictionOutput)
+                          TrainingArguments, PredictionOutput, EvalPrediction)
 from lm_score.bert_lm import get_sentences_scores
 
 #os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -57,14 +58,17 @@ def freeze_decoder_weight(model, num_layers):
 
 
 def compute_metrics(pred):
-    labels_ids = pred.label_ids
-    pred_ids = pred.predictions[0].argmax(2)
+    label_ids = pred.label_ids
+    # pred_ids = pred.predictions[0].argmax(2)
+    pred_ids = pred.predictions
 
     # print("****labels_ids, pred_ids:", labels_ids, pred_ids)
     # print("**shape", len(pred_ids), pred_ids[0].shape, pred_ids[1].shape, pred_ids[2].shape)
     # all unnecessary tokens are removed
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+    #  pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    pred_str = [" ".join(map(str, pred_id)) for pred_id in pred_ids.tolist()]
+    label_str = [" ".join(map(str, label_id)) for label_id in label_ids.tolist()]
+    # label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
     # print("*** strings:", pred_str, label_str)
     rouge_output = rouge.compute(predictions=pred_str, references=label_str,
                                  rouge_types=["rouge2"])["rouge2"].mid
@@ -189,7 +193,7 @@ class CustomizeTrainer(Trainer):
         Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
         Works both with or without labels.
         """
-        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         model = self.model
         # multi-gpu eval
         if self.args.n_gpu > 1:
@@ -199,15 +203,15 @@ class CustomizeTrainer(Trainer):
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
         batch_size = dataloader.batch_size
-        logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", self.num_examples(dataloader))
-        logger.info("  Batch size = %d", batch_size)
+        LOG.info("***** Running %s *****", description)
+        LOG.info("  Num examples = %d", self.num_examples(dataloader))
+        LOG.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
         preds: torch.Tensor = None
         label_ids: torch.Tensor = None
         model.eval()
-        if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+        # if is_torch_tpu_available():
+        #     dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
         if self.args.past_index >= 0:
             past = None
         for inputs in tqdm(dataloader, desc=description):
@@ -259,12 +263,12 @@ class CustomizeTrainer(Trainer):
                 preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
             if label_ids is not None:
                 label_ids = self.distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
-        elif is_torch_tpu_available():
-            # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
-            if preds is not None:
-                preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
-            if label_ids is not None:
-                label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+       # elif is_torch_tpu_available():
+       #     # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
+       #     if preds is not None:
+       #         preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
+       #     if label_ids is not None:
+       #         label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
             preds = preds.cpu().numpy()
@@ -458,8 +462,8 @@ def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
 def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
-    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
-                                               val_data_files=lcsts.test_merged_csv,
+    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.train_merged_csv,
+                                               val_data_files=lcsts.val_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)
@@ -471,12 +475,13 @@ def run(args, lcsts):
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         # predict_from_generate=True,
+        num_train_epochs=20,
         evaluate_during_training=True,
         do_train=True,
         do_eval=True,
         logging_steps=20,
-        save_steps=20,
-        eval_steps=40,
+        save_steps=100,
+        eval_steps=1000,
         overwrite_output_dir=True,
         warmup_steps=40,
         save_total_limit=10,
@@ -515,7 +520,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
                         type=int,
-                        default=4)
+                        default=64)
     parser.add_argument('--num_freeze_decoder_layers',
                         help='the number of decoder layers to freeze',
                         type=int,

@@ -347,7 +347,7 @@ class CustomizeTrainer(Trainer):
         prev_reward = sum([REWARD_MAP[idx] for idx in current_ids])
         curr_reward = sum(rewards)
         print("prev_reward:", prev_reward, "curr_reward:", curr_reward)
-        loss *= (curr_reward - prev_reward)
+        # loss *= (curr_reward - prev_reward)
         # store current iterations's reward in to cache
         for i in range(len(rewards)):
             REWARD_MAP[current_ids[i]] = rewards[i]
@@ -475,7 +475,7 @@ def run(args, lcsts):
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         # predict_from_generate=True,
-        num_train_epochs=20,
+        #num_train_epochs=10,
         evaluate_during_training=True,
         do_train=True,
         do_eval=True,

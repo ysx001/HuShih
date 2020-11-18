@@ -99,7 +99,8 @@ def sample_decode_curr_iter(logits, num_batch, greedy=True):
             sum_log_probs.append(sum_log_prob)
     curr_iter_decoded = tokenizer.batch_decode(curr_decode_ids,
                                                skip_special_tokens=True)
-    LOG.info("decode current iteration softmax: %s", curr_iter_decoded)
+    LOG.info("decode current iteration softmax (greedy=%s): %s", greedy,
+             curr_iter_decoded)
     LOG.info("sum_log_probs: %s", sum_log_probs)
     return curr_decode_ids, curr_iter_decoded, sum_log_probs
 

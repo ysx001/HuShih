@@ -12,11 +12,13 @@ from multiprocessing import Process, Array
 from typing import Dict, Union, Any
 import torch
 import torch.nn as nn
+from torch.utils.data.dataloader import DataLoader
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from datasets import load_dataset
 from data_utils.lcsts import LCSTS
 from transformers import (BertTokenizer, EncoderDecoderModel, Trainer,
-                          TrainingArguments)
+                          TrainingArguments, PredictionOutput)
 from lm_score.bert_lm import get_sentences_scores
 
 #os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -105,24 +107,24 @@ def compute_hybrid_rewards(inputs_labels, decode_ids, loss):
             c += 1
     rouge_scores = np.asarray(rouge_scores) / 3
     print("rouge score", rouge_scores)
-    ppl_values = [0.0] * len(rouge_scores)
+    # ppl_values = [0.0] * len(rouge_scores)
+    #
+    # to_be_sent_msg = {
+    #     'ppl_values': ppl_values,
+    #     'curr_iter_decoded': curr_iter_decoded
+    # }
+    # socket.send(pickle.dumps(to_be_sent_msg))
+    # print("sent serialized dict")
+    # serialized_ppl_values = socket.recv()
+    # ppl_values = pickle.loads(serialized_ppl_values)
 
-    to_be_sent_msg = {
-        'ppl_values': ppl_values,
-        'curr_iter_decoded': curr_iter_decoded
-    }
-    socket.send(pickle.dumps(to_be_sent_msg))
-    print("sent serialized dict")
-    serialized_ppl_values = socket.recv()
-    ppl_values = pickle.loads(serialized_ppl_values)
-
-    print("ppl before normalize", ppl_values[:])
-    ppl = np.asarray(ppl_values[:])
-    # normalize ppl score
-    ppl = np.clip(ppl, 0, MAX_PPL)
-    ppl = 2 * sigmoid(-ppl)
-    print("ppl after normalize", ppl)
-    return rouge_scores + ppl
+    # # print("ppl before normalize", ppl_values[:])
+    # ppl = np.asarray(ppl_values[:])
+    # # normalize ppl score
+    # ppl = np.clip(ppl, 0, MAX_PPL)
+    # ppl = 2 * sigmoid(-ppl)
+    # print("ppl after normalize", ppl)
+    return rouge_scores
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -168,7 +170,8 @@ class CustomizeTrainer(Trainer):
         Subclass and override for custom behavior.
         """
         outputs = model(**inputs)
-        print("****outputs: loss {}, shape {}".format(outputs[0], outputs[1].shape))
+        print("****outputs: loss {}, shape 1 {} shape 2 {}, shape 3 {}".format(outputs[0], outputs[1].shape, outputs[2].shape, outputs[3].shape))
+        print("outputs:", len(outputs))
         # Save past state if it exists
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
@@ -176,6 +179,106 @@ class CustomizeTrainer(Trainer):
         # Also return the max vocab index on (batch_size, num_tokens). This is
         # For use of decoding to Chinese words for this training step.
         return outputs[0], outputs[1].argmax(2)
+
+    def _prediction_loop(
+        self, dataloader: DataLoader, description: str, prediction_loss_only: Optional[bool] = None
+    ) -> PredictionOutput:
+        """
+        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
+        Works both with or without labels.
+        """
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+        model = self.model
+        # multi-gpu eval
+        if self.args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
+        else:
+            model = self.model
+        # Note: in torch.distributed mode, there's no point in wrapping the model
+        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        batch_size = dataloader.batch_size
+        logger.info("***** Running %s *****", description)
+        logger.info("  Num examples = %d", self.num_examples(dataloader))
+        logger.info("  Batch size = %d", batch_size)
+        eval_losses: List[float] = []
+        preds: torch.Tensor = None
+        label_ids: torch.Tensor = None
+        model.eval()
+        if is_torch_tpu_available():
+            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+        if self.args.past_index >= 0:
+            past = None
+        for inputs in tqdm(dataloader, desc=description):
+            has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
+            for k, v in inputs.items():
+                if isinstance(v, torch.Tensor):
+                    inputs[k] = v.to(self.args.device)
+            if self.args.past_index >= 0:
+                inputs["mems"] = past
+
+            with torch.no_grad():
+                # if self.args.predict_from_generate:
+                if True:
+                    max_length = model.config.max_length
+                    logits_out = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"])
+                    # in case the batch is shorter then max length, the output should be padded
+                    logits = model.config.eos_token_id * torch.ones(
+                        (logits_out.shape[0], max_length), dtype=logits_out.dtype, device=logits_out.device
+                    )
+                    logits[:, : logits_out.shape[-1]] = logits_out
+
+                    if has_labels:
+                        outputs = model(**inputs)
+                        step_eval_loss = outputs[0]
+                        eval_losses += [step_eval_loss.mean().item()]
+                else:
+                    outputs = model(**inputs)
+
+                    if has_labels:
+                        step_eval_loss, logits = outputs[:2]
+                        eval_losses += [step_eval_loss.mean().item()]
+                    else:
+                        logits = outputs[0]
+                    if self.args.past_index >= 0:
+                        past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+            if not prediction_loss_only:
+                if preds is None:
+                    preds = logits.detach()
+                else:
+                    preds = torch.cat((preds, logits.detach()), dim=0)
+                if inputs.get("labels") is not None:
+                    if label_ids is None:
+                        label_ids = inputs["labels"].detach()
+                    else:
+                        label_ids = torch.cat((label_ids, inputs["labels"].detach()), dim=0)
+        if self.args.local_rank != -1:
+            # In distributed mode, concatenate all results from all nodes:
+            if preds is not None:
+                preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
+            if label_ids is not None:
+                label_ids = self.distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
+        elif is_torch_tpu_available():
+            # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
+            if preds is not None:
+                preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
+            if label_ids is not None:
+                label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+        # Finally, turn the aggregated tensors into numpy arrays.
+        if preds is not None:
+            preds = preds.cpu().numpy()
+        if label_ids is not None:
+            label_ids = label_ids.cpu().numpy()
+        if self.compute_metrics is not None and preds is not None and label_ids is not None:
+            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+        else:
+            metrics = {}
+        if len(eval_losses) > 0:
+            metrics["eval_loss"] = np.mean(eval_losses)
+        # Prefix all keys with eval_
+        for key in list(metrics.keys()):
+            if not key.startswith("eval_"):
+                metrics[f"eval_{key}"] = metrics.pop(key)
+        return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     # Override training step
     def training_step(self, model: nn.Module,
@@ -353,8 +456,8 @@ def setup_model(model_name, num_freeze_decoder_layers, tokenizer):
 def run(args, lcsts):
     # load train and validation data
     # TODO: using test data to see stuffs working first
-    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.train_merged_csv,
-                                               val_data_files=lcsts.val_merged_csv,
+    train_dataset, val_dataset = setup_dataset(train_data_files=lcsts.test_merged_csv,
+                                               val_data_files=lcsts.test_merged_csv,
                                                tokenizer=tokenizer)
     # setup model
     model = setup_model(args.model_name, args.num_freeze_decoder_layers, tokenizer)
@@ -410,7 +513,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         help='the batch size for training and validation',
                         type=int,
-                        default=256)
+                        default=4)
     parser.add_argument('--num_freeze_decoder_layers',
                         help='the number of decoder layers to freeze',
                         type=int,

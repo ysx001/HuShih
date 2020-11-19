@@ -44,121 +44,132 @@ parser.add_argument('--model_name',
                     default=DEFAULT_MODEL_NAME)
 args = parser.parse_args()
 
-
-tokenizer = BertTokenizer.from_pretrained(DEFAULT_MODEL_NAME)
-model = EncoderDecoderModel.from_pretrained("ckpt/checkpoint-2800")
-# model.to("cuda")
-
-lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
-                output_path=args.preprocess_output_path)
-test_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
-
-pred_str_keys = ["greedy_pred_str", "beam_output_pred_str",
-                 "beam_output_ngram_pred_str",
-                 "top_k_only_ngram_pred_str",
-                 "top_p_only_ngram_pred_str",
-                 "top_k_top_p_ngram_pred_str"]
-
-def generate_summary(batch):
-    max_summary_length = 32
-    # tokenize the short_text and the ground truth summary
-    inputs = tokenizer(batch["short_text"], padding="max_length",
-                       truncation=True, max_length=128)
-    labels = tokenizer(batch["summary"], padding="max_length",
-                       truncation=True, max_length=max_summary_length)
-    # run evaluation
-    # input_ids = inputs.input_ids.to("cuda")
-    # attention_mask = inputs.attention_mask.to("cuda")
-    input_ids = torch.tensor(inputs.input_ids)
-    attention_mask = torch.tensor(inputs.attention_mask)
-    # documentation
-    # https://huggingface.co/blog/how-to-generate
-    # greedy serach
-    greedy = model.generate(input_ids,
-                            attention_mask=attention_mask,
-                            max_length=max_summary_length)
-    # concate ids to strings
-    # this is because we are calculation rouge score for chinese text
-    # we needed them in enumerical ids to correctly utilized the english-based
-    # rouge scores
-    # number string for rouge
-    greedy_pred_str = [" ".join(map(str, pred_id)) for pred_id in greedy.tolist()]
-    batch["greedy_pred_str"] = greedy_pred_str
-    # decode the output
-    greedy_pred_decode_str = tokenizer.batch_decode(greedy, skip_special_tokens=True)
-    print("greedy_pred_decode_str: ", greedy_pred_decode_str)
-    # beam search + no 2-gram appears twice
-    beam = model.generate(input_ids,
-                          max_length=max_summary_length,
-                          num_beams=3,
-                          early_stopping=True)
-    # number string for rouge
-    beam_output_pred_str = [" ".join(map(str, pred_id)) for pred_id in beam.tolist()]
-    batch["beam_output_pred_str"] = beam_output_pred_str
-    # decode the output
-    beam_pred_decode_str = tokenizer.batch_decode(beam, skip_special_tokens=True)
-    print("beam_pred_decode_str: ", beam_pred_decode_str)
-    # beam search + no 2-gram appears twice
-    beam_ngram = model.generate(input_ids,
-                                max_length=max_summary_length,
-                                num_beams=3,
-                                no_repeat_ngram_size=2,
-                                early_stopping=True)
-    # number string for rouge
-    beam_output_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in beam_ngram.tolist()]
-    batch["beam_output_ngram_pred_str"] = beam_output_ngram_pred_str
-    # decode the output
-    beam_ngram_pred_decode_str = tokenizer.batch_decode(beam_ngram, skip_special_tokens=True)
-    batch["beam_ngram_pred_decode_str"] = beam_ngram_pred_decode_str
-    print("beam_ngram_pred_decode_str: ", beam_ngram_pred_decode_str)
-    # using top-k sampling
-    # top_k_only = model.generate(input_ids,
-    #                             do_sample=True,
-    #                             max_length=max_summary_length,
-    #                             top_k=10)
-    # # number string for rouge
-    # top_k_only_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in top_k_only.tolist()]
-    # batch["top_k_only_ngram_pred_str"] = top_k_only_ngram_pred_str
-    # # decode the output
-    # top_k_only_pred_decode_str = tokenizer.batch_decode(top_k_only, skip_special_tokens=True)
-    # batch["top_k_only_pred_decode_str"] = top_k_only_pred_decode_str
-    # print("top_k_only_pred_decode_str: ", top_k_only_pred_decode_str)
-    # # using top-p sampling
-    # top_p_only = model.generate(input_ids,
-    #                             do_sample=True,
-    #                             max_length=max_summary_length,
-    #                             top_k=0,
-    #                             top_p=0.92)
-    # # number string for rouge
-    # top_p_only_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in top_p_only.tolist()]
-    # batch["top_p_only_ngram_pred_str"] = top_p_only_ngram_pred_str
-    # # decode the output
-    # top_p_only_pred_decode_str = tokenizer.batch_decode(top_p_only, skip_special_tokens=True)
-    # batch["top_p_only_pred_decode_str"] = top_p_only_pred_decode_str
-    # print("top_p_only_pred_decode_str: ", top_p_only_pred_decode_str)
-    # # using top-p + top-k sampling
-    # top_k_top_p = model.generate(input_ids,
-    #                              do_sample=True,
-    #                              max_length=max_summary_length,
-    #                              top_k=10,
-    #                              top_p=0.92)
-    #                         #    num_return_sequences=3 we can sample more than 1 sentences
-    # # number string for rouge
-    # top_k_top_p_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in top_k_top_p.tolist()]
-    # batch["top_k_top_p_ngram_pred_str"] = top_k_top_p_ngram_pred_str
-    # # decode the output
-    # top_k_top_p_pred_decode_str = tokenizer.batch_decode(top_k_top_p, skip_special_tokens=True)
-    # batch["top_k_top_p_pred_decode_str"] = top_k_top_p_pred_decode_str
-    # print("top_k_top_p_pred_decode_str: ", top_k_top_p_pred_decode_str)
-    # label str for rouge
-    label_str = [" ".join(map(str, label_id)) for label_id in labels.input_ids]
-    batch["label_id_str"] = label_str
-    label_decode_str = tokenizer.batch_decode(labels.input_ids, skip_special_tokens=True)
-    print("label_decode_str: ", label_decode_str)
-    return batch
-
 if torch.cuda.device_count() > 0:
     with torch.cuda.device(0):
+        import sys
+        print('__Python VERSION:', sys.version)
+        print('__pyTorch VERSION:', torch.__version__)
+        print('__CUDA VERSION')
+        from subprocess import call
+        # call(["nvcc", "--version"]) does not work
+        print('__CUDNN VERSION:', torch.backends.cudnn.version())
+        print('__Number CUDA Devices:', torch.cuda.device_count())
+        print('__Devices')
+        call(["nvidia-smi", "--format=csv", "--query-gpu=index,name,driver_version,memory.total,memory.used,memory.free"])
+        print('Active CUDA Device: GPU', torch.cuda.current_device())
+        print('Available devices ', torch.cuda.device_count())
+        print('Current cuda device ', torch.cuda.current_device())
+        def generate_summary(batch):
+            max_summary_length = 32
+            # tokenize the short_text and the ground truth summary
+            inputs = tokenizer(batch["short_text"], padding="max_length",
+                            truncation=True, max_length=128)
+            labels = tokenizer(batch["summary"], padding="max_length",
+                            truncation=True, max_length=max_summary_length)
+            # run evaluation
+            # input_ids = inputs.input_ids.to("cuda")
+            # attention_mask = inputs.attention_mask.to("cuda")
+            input_ids = torch.tensor(inputs.input_ids)
+            attention_mask = torch.tensor(inputs.attention_mask)
+            # documentation
+            # https://huggingface.co/blog/how-to-generate
+            # greedy serach
+            greedy = model.generate(input_ids,
+                                    attention_mask=attention_mask,
+                                    max_length=max_summary_length)
+            # concate ids to strings
+            # this is because we are calculation rouge score for chinese text
+            # we needed them in enumerical ids to correctly utilized the english-based
+            # rouge scores
+            # number string for rouge
+            greedy_pred_str = [" ".join(map(str, pred_id)) for pred_id in greedy.tolist()]
+            batch["greedy_pred_str"] = greedy_pred_str
+            # decode the output
+            greedy_pred_decode_str = tokenizer.batch_decode(greedy, skip_special_tokens=True)
+            print("greedy_pred_decode_str: ", greedy_pred_decode_str)
+            # beam search + no 2-gram appears twice
+            beam = model.generate(input_ids,
+                                max_length=max_summary_length,
+                                num_beams=3,
+                                early_stopping=True)
+            # number string for rouge
+            beam_output_pred_str = [" ".join(map(str, pred_id)) for pred_id in beam.tolist()]
+            batch["beam_output_pred_str"] = beam_output_pred_str
+            # decode the output
+            beam_pred_decode_str = tokenizer.batch_decode(beam, skip_special_tokens=True)
+            print("beam_pred_decode_str: ", beam_pred_decode_str)
+            # beam search + no 2-gram appears twice
+            beam_ngram = model.generate(input_ids,
+                                        max_length=max_summary_length,
+                                        num_beams=3,
+                                        no_repeat_ngram_size=2,
+                                        early_stopping=True)
+            # number string for rouge
+            beam_output_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in beam_ngram.tolist()]
+            batch["beam_output_ngram_pred_str"] = beam_output_ngram_pred_str
+            # decode the output
+            beam_ngram_pred_decode_str = tokenizer.batch_decode(beam_ngram, skip_special_tokens=True)
+            batch["beam_ngram_pred_decode_str"] = beam_ngram_pred_decode_str
+            print("beam_ngram_pred_decode_str: ", beam_ngram_pred_decode_str)
+            # using top-k sampling
+            # top_k_only = model.generate(input_ids,
+            #                             do_sample=True,
+            #                             max_length=max_summary_length,
+            #                             top_k=10)
+            # # number string for rouge
+            # top_k_only_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in top_k_only.tolist()]
+            # batch["top_k_only_ngram_pred_str"] = top_k_only_ngram_pred_str
+            # # decode the output
+            # top_k_only_pred_decode_str = tokenizer.batch_decode(top_k_only, skip_special_tokens=True)
+            # batch["top_k_only_pred_decode_str"] = top_k_only_pred_decode_str
+            # print("top_k_only_pred_decode_str: ", top_k_only_pred_decode_str)
+            # # using top-p sampling
+            # top_p_only = model.generate(input_ids,
+            #                             do_sample=True,
+            #                             max_length=max_summary_length,
+            #                             top_k=0,
+            #                             top_p=0.92)
+            # # number string for rouge
+            # top_p_only_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in top_p_only.tolist()]
+            # batch["top_p_only_ngram_pred_str"] = top_p_only_ngram_pred_str
+            # # decode the output
+            # top_p_only_pred_decode_str = tokenizer.batch_decode(top_p_only, skip_special_tokens=True)
+            # batch["top_p_only_pred_decode_str"] = top_p_only_pred_decode_str
+            # print("top_p_only_pred_decode_str: ", top_p_only_pred_decode_str)
+            # # using top-p + top-k sampling
+            # top_k_top_p = model.generate(input_ids,
+            #                              do_sample=True,
+            #                              max_length=max_summary_length,
+            #                              top_k=10,
+            #                              top_p=0.92)
+            #                         #    num_return_sequences=3 we can sample more than 1 sentences
+            # # number string for rouge
+            # top_k_top_p_ngram_pred_str = [" ".join(map(str, pred_id)) for pred_id in top_k_top_p.tolist()]
+            # batch["top_k_top_p_ngram_pred_str"] = top_k_top_p_ngram_pred_str
+            # # decode the output
+            # top_k_top_p_pred_decode_str = tokenizer.batch_decode(top_k_top_p, skip_special_tokens=True)
+            # batch["top_k_top_p_pred_decode_str"] = top_k_top_p_pred_decode_str
+            # print("top_k_top_p_pred_decode_str: ", top_k_top_p_pred_decode_str)
+            # label str for rouge
+            label_str = [" ".join(map(str, label_id)) for label_id in labels.input_ids]
+            batch["label_id_str"] = label_str
+            label_decode_str = tokenizer.batch_decode(labels.input_ids, skip_special_tokens=True)
+            print("label_decode_str: ", label_decode_str)
+            return batch
+
+        tokenizer = BertTokenizer.from_pretrained(DEFAULT_MODEL_NAME)
+        model = EncoderDecoderModel.from_pretrained("ckpt/checkpoint-2800")
+        # model.to("cuda")
+
+        lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
+                        output_path=args.preprocess_output_path)
+        test_dataset = load_dataset('csv', data_files=[lcsts.test_merged_csv])['train']
+
+        pred_str_keys = ["greedy_pred_str", "beam_output_pred_str",
+                        "beam_output_ngram_pred_str",
+                        "top_k_only_ngram_pred_str",
+                        "top_p_only_ngram_pred_str",
+                        "top_k_top_p_ngram_pred_str"]
         results = test_dataset.map(generate_summary, batched=True,
                                    batch_size=args.batch_size,
                                    remove_columns=["short_text"])

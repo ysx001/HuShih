@@ -47,7 +47,7 @@ args = parser.parse_args()
 
 tokenizer = BertTokenizer.from_pretrained(DEFAULT_MODEL_NAME)
 model = EncoderDecoderModel.from_pretrained("ckpt/checkpoint-2800")
-model.to("cuda")
+# model.to("cuda")
 
 lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
                 output_path=args.preprocess_output_path)
@@ -69,8 +69,8 @@ def generate_summary(batch):
     # run evaluation
     # input_ids = inputs.input_ids.to("cuda")
     # attention_mask = inputs.attention_mask.to("cuda")
-    input_ids = torch.tensor(inputs.input_ids).to("cuda")
-    attention_mask = torch.tensor(inputs.attention_mask).to("cuda")
+    input_ids = torch.tensor(inputs.input_ids)
+    attention_mask = torch.tensor(inputs.attention_mask)
     # documentation
     # https://huggingface.co/blog/how-to-generate
     # greedy serach
@@ -157,19 +157,16 @@ def generate_summary(batch):
     print("label_decode_str: ", label_decode_str)
     return batch
 
-
-#%%
-results = test_dataset.map(generate_summary, batched=True,
-                           batch_size=args.batch_size,
-                           remove_columns=["short_text"])
-
-
-#%%
-# load rouge for validation
-rouge = nlp.load_metric("rouge")
-for result_key in pred_str_keys:
-    pred_str = results[result_key]
-    label_str = results["label_id_str"]
-    rouge_output = rouge.compute(predictions=pred_str, references=label_str,
-                                 rouge_types=["rouge2", "rouge1", "rougeL"])
-    print("{}'s rouge score {}".format(result_key, rouge_output))
+if torch.cuda.device_count() > 0:
+    with torch.cuda.device(0):
+        results = test_dataset.map(generate_summary, batched=True,
+                                   batch_size=args.batch_size,
+                                   remove_columns=["short_text"])
+        # load rouge for validation
+        rouge = nlp.load_metric("rouge")
+        for result_key in pred_str_keys:
+            pred_str = results[result_key]
+            label_str = results["label_id_str"]
+            rouge_output = rouge.compute(predictions=pred_str, references=label_str,
+                                         rouge_types=["rouge2", "rouge1", "rougeL"])
+            print("{}'s rouge score {}".format(result_key, rouge_output))

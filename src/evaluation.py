@@ -168,5 +168,5 @@ for result_key in pred_str_keys:
     pred_str = results[result_key]
     label_str = results["label_id_str"]
     rouge_output = rouge.compute(predictions=pred_str, references=label_str,
-                                 rouge_types=["rouge2"])["rouge2"].mid
+                                 rouge_types=["rouge2", "rouge1", "rougeL"])
     print("{}'s rouge score {}".format(result_key, rouge_output))

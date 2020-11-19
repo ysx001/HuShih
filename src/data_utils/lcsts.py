@@ -162,9 +162,12 @@ class LCSTS(object):
         docs = soup.find_all('doc')
         for doc in docs:
             merged_dict = {}
-            merged_dict['id'] = int(doc.get('id'))
             if usage != UsageTypes.TRAIN.value:
-                merged_dict['human_label'] = doc.human_label.get_text().strip()
+                human_label = int(doc.human_label.get_text().strip())
+                if human_label < 3:
+                    continue
+                merged_dict['human_label'] = human_label
+            merged_dict['id'] = int(doc.get('id'))
             merged_dict['summary'] = doc.summary.get_text().strip()
             merged_dict['short_text'] = doc.short_text.get_text().strip()
             merged.append(merged_dict)

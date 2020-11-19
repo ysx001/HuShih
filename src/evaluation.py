@@ -47,7 +47,7 @@ args = parser.parse_args()
 
 tokenizer = BertTokenizer.from_pretrained(DEFAULT_MODEL_NAME)
 model = EncoderDecoderModel.from_pretrained("ckpt/checkpoint-2800")
-# model.to("cuda")
+model.to("cuda")
 
 lcsts = LCSTS(args.training_path, args.val_path, args.test_path,
                 output_path=args.preprocess_output_path)
@@ -69,8 +69,8 @@ def generate_summary(batch):
     # run evaluation
     # input_ids = inputs.input_ids.to("cuda")
     # attention_mask = inputs.attention_mask.to("cuda")
-    input_ids = torch.tensor(inputs.input_ids)
-    attention_mask = torch.tensor(inputs.attention_mask)
+    input_ids = torch.tensor(inputs.input_ids).to("cuda")
+    attention_mask = torch.tensor(inputs.attention_mask).to("cuda")
     # documentation
     # https://huggingface.co/blog/how-to-generate
     # greedy serach
